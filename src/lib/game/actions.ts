@@ -11,21 +11,14 @@ import {
 } from "firebase/firestore";
 import { firestore } from "@/lib/firestore";
 import { GARDEN_SLOT_DEFAULT, ROUNDS_TOTAL, SETUP_HAND_SIZE, SETUP_STARTING_RESOURCES } from "@/lib/game/constants";
+import { EVENT_CARDS } from "@/lib/game/cards/events";
+import { PLANT_CARDS, PLANT_CARD_IDS } from "@/lib/game/cards/plants";
+import { drawSetupHands, shuffleFisherYates } from "@/lib/game/decks";
 import { gameDocRef, gameLogColRef, playerDocRef, playersColRef } from "@/lib/game/refs";
-import type { GameDoc, GameLogEntryDoc, PlantCard, PlayerDoc } from "@/lib/game/types";
+import type { GameDoc, GameLogEntryDoc, PlayerDoc, ResourceKey } from "@/lib/game/types";
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message);
-}
-
-function createStartingHand(): PlantCard[] {
-  return Array.from({ length: SETUP_HAND_SIZE }, (_, index) => ({
-    id: `starter-${index + 1}`,
-    name: `Starter Seed ${index + 1}`,
-    growthCost: 1,
-    scoreValue: 1,
-    growthTurns: 1
-  }));
 }
 
 function appendLog(transaction: Transaction, gameId: string, entry: Omit<GameLogEntryDoc, "createdAt">) {
@@ -34,7 +27,7 @@ function appendLog(transaction: Transaction, gameId: string, entry: Omit<GameLog
 }
 
 function requireTurnPhase(game: Omit<GameDoc, "id">) {
-  assert(game.phase === "turns", "This action is only available during turn phase.");
+  assert(game.phase === "active" || game.phase === "turns", "This action is only available during the active phase.");
 }
 
 function getPlayerByUid(snapshots: QueryDocumentSnapshot<Omit<PlayerDoc, "id">>[], uid: string) {
@@ -46,6 +39,10 @@ function getPlayerByUid(snapshots: QueryDocumentSnapshot<Omit<PlayerDoc, "id">>[
 async function getOrderedPlayers(gameId: string) {
   const snap = await getDocs(query(playersColRef(gameId), orderBy("joinedAt", "asc")));
   return snap.docs;
+}
+
+function getPlantById(plantId: string) {
+  return PLANT_CARDS.find((card) => card.id === plantId);
 }
 
 export async function createGameTx(hostDisplayName: string, uid: string) {
@@ -63,7 +60,7 @@ export async function createGameTx(hostDisplayName: string, uid: string) {
       roundsTotal: ROUNDS_TOTAL,
       hostPlayerId: hostRef.id,
       activePlayerId: null,
-      eventDeck: [],
+      eventDeck: shuffleFisherYates(EVENT_CARDS),
       lastPhaseResolvedRound: null
     });
 
@@ -72,11 +69,11 @@ export async function createGameTx(hostDisplayName: string, uid: string) {
       uid,
       isHost: true,
       joinedAt: serverTimestamp(),
-      resources: SETUP_STARTING_RESOURCES,
+      resources: { ...SETUP_STARTING_RESOURCES },
       score: 0,
-      hand: createStartingHand(),
+      hand: [],
       gardenSlots: Array.from({ length: GARDEN_SLOT_DEFAULT }, () => "empty"),
-      setupKept: false
+      keptFromMulligan: false
     });
 
     appendLog(transaction, gameRef.id, { message: `${hostDisplayName} created the game.`, playerId: hostRef.id, type: "system" });
@@ -101,11 +98,11 @@ export async function joinGameTx(gameId: string, displayName: string, uid: strin
       uid,
       isHost: false,
       joinedAt: serverTimestamp(),
-      resources: SETUP_STARTING_RESOURCES,
+      resources: { ...SETUP_STARTING_RESOURCES },
       score: 0,
-      hand: createStartingHand(),
+      hand: [],
       gardenSlots: Array.from({ length: GARDEN_SLOT_DEFAULT }, () => "empty"),
-      setupKept: false
+      keptFromMulligan: false
     });
 
     appendLog(transaction, gameId, { message: `${displayName} joined the game.`, playerId: playerRef.id, type: "system" });
@@ -129,6 +126,18 @@ export async function startGameSetupTx(gameId: string, uid: string) {
     assert(hostSnap, "Host player not found.");
     assert(hostSnap.data().uid === uid, "Only the host can start the game.");
 
+    const orderedPlayerIds = players.map((player) => player.id);
+    const shuffledPlantIds = shuffleFisherYates(PLANT_CARD_IDS);
+    const { hands } = drawSetupHands(orderedPlayerIds, shuffledPlantIds, SETUP_HAND_SIZE);
+
+    players.forEach((player) => {
+      transaction.update(playerDocRef(gameId, player.id), {
+        hand: hands[player.id] ?? [],
+        resources: { ...SETUP_STARTING_RESOURCES },
+        keptFromMulligan: false
+      });
+    });
+
     transaction.update(gameRef, {
       status: "in_progress",
       phase: "setup",
@@ -141,7 +150,12 @@ export async function startGameSetupTx(gameId: string, uid: string) {
   });
 }
 
-export async function submitSetupKeepTx(gameId: string, uid: string) {
+export async function submitSetupKeepTx(
+  gameId: string,
+  uid: string,
+  keptPlantIds: string[],
+  discardedResources: ResourceKey[]
+) {
   const players = await getOrderedPlayers(gameId);
 
   return runTransaction(firestore, async (transaction) => {
@@ -151,13 +165,46 @@ export async function submitSetupKeepTx(gameId: string, uid: string) {
     assert(gameSnap.data().phase === "setup", "Setup keep can only be submitted during setup phase.");
 
     const playerSnap = getPlayerByUid(players, uid);
-    transaction.update(playerDocRef(gameId, playerSnap.id), { setupKept: true });
-    appendLog(transaction, gameId, { message: `${playerSnap.data().displayName} is ready.`, playerId: playerSnap.id, type: "action" });
+    const playerData = playerSnap.data();
 
-    const allReady = players.every((snapshot) => snapshot.id === playerSnap.id || snapshot.data().setupKept === true);
+    assert(playerData.keptFromMulligan !== true, "Setup choice already submitted.");
+    assert(keptPlantIds.length >= 0 && keptPlantIds.length <= SETUP_HAND_SIZE, "Invalid kept plant count.");
+
+    const handSet = new Set(playerData.hand);
+    keptPlantIds.forEach((plantId) => {
+      assert(handSet.has(plantId), "Kept plants must come from the setup hand.");
+    });
+
+    const uniqueKeptIds = [...new Set(keptPlantIds)];
+    assert(uniqueKeptIds.length === keptPlantIds.length, "Kept plants must be unique.");
+
+    assert(discardedResources.length === keptPlantIds.length, "Discard exactly one resource per kept plant.");
+
+    const nextResources = { ...playerData.resources };
+    discardedResources.forEach((resourceKey) => {
+      assert(nextResources[resourceKey] > 0, `Not enough ${resourceKey} to discard.`);
+      nextResources[resourceKey] -= 1;
+    });
+
+    transaction.update(playerDocRef(gameId, playerSnap.id), {
+      hand: uniqueKeptIds,
+      resources: nextResources,
+      keptFromMulligan: true
+    });
+
+    appendLog(transaction, gameId, { message: `${playerData.displayName} finalized setup.`, playerId: playerSnap.id, type: "action" });
+
+    const allReady = players.every((snapshot) => {
+      if (snapshot.id === playerSnap.id) {
+        return true;
+      }
+
+      return snapshot.data().keptFromMulligan === true;
+    });
+
     if (allReady) {
-      transaction.update(gameRef, { phase: "turns" });
-      appendLog(transaction, gameId, { message: "All players are ready. Turn phase begins.", type: "system" });
+      transaction.update(gameRef, { phase: "active" });
+      appendLog(transaction, gameId, { message: "All players are ready. Active phase begins.", type: "system" });
     }
   });
 }
@@ -178,17 +225,22 @@ export async function sowPlantTx(gameId: string, uid: string, plantId: string, s
     assert(slotIndex >= 0 && slotIndex < playerData.gardenSlots.length, "Invalid garden slot.");
     assert(playerData.gardenSlots[slotIndex] === "empty", "Selected garden slot is not empty.");
 
-    const plant = playerData.hand.find((card) => card.id === plantId);
-    assert(plant, "Plant not found in hand.");
-    assert(playerData.resources >= plant.growthCost, "Not enough resources to sow this plant.");
+    assert(playerData.hand.includes(plantId), "Plant not found in hand.");
+
+    const plant = getPlantById(plantId);
+    assert(plant, "Plant card definition not found.");
+    assert(playerData.resources.seeds >= plant.seedCost, "Not enough seeds to sow this plant.");
 
     const nextSlots = [...playerData.gardenSlots];
     nextSlots[slotIndex] = "seedling";
 
     transaction.update(playerDocRef(gameId, playerSnap.id), {
-      hand: playerData.hand.filter((card) => card.id !== plantId),
+      hand: playerData.hand.filter((cardId) => cardId !== plantId),
       gardenSlots: nextSlots,
-      resources: playerData.resources - plant.growthCost
+      resources: {
+        ...playerData.resources,
+        seeds: playerData.resources.seeds - plant.seedCost
+      }
     });
 
     appendLog(transaction, gameId, {
@@ -214,14 +266,17 @@ export async function waterPlantTx(gameId: string, uid: string, slotIndex: numbe
     const playerData = playerSnap.data();
     assert(slotIndex >= 0 && slotIndex < playerData.gardenSlots.length, "Invalid garden slot.");
     assert(playerData.gardenSlots[slotIndex] === "seedling", "Only seedlings can be watered.");
-    assert(playerData.resources >= 1, "Not enough resources to water a plant.");
+    assert(playerData.resources.water >= 1, "Not enough water to water a plant.");
 
     const nextSlots = [...playerData.gardenSlots];
     nextSlots[slotIndex] = "grown";
 
     transaction.update(playerDocRef(gameId, playerSnap.id), {
       gardenSlots: nextSlots,
-      resources: playerData.resources - 1,
+      resources: {
+        ...playerData.resources,
+        water: playerData.resources.water - 1
+      },
       score: playerData.score + 1
     });
 
@@ -244,9 +299,16 @@ export async function activatePlantAbilityTx(gameId: string, uid: string, slotIn
     const playerData = playerSnap.data();
     assert(slotIndex >= 0 && slotIndex < playerData.gardenSlots.length, "Invalid garden slot.");
     assert(playerData.gardenSlots[slotIndex] === "grown", "Only grown plants can activate abilities.");
-    assert(playerData.resources >= 1, "Not enough resources to activate ability.");
+    assert(playerData.resources.water >= 1, "Not enough water to activate ability.");
 
-    transaction.update(playerDocRef(gameId, playerSnap.id), { resources: playerData.resources + 1 });
+    transaction.update(playerDocRef(gameId, playerSnap.id), {
+      resources: {
+        ...playerData.resources,
+        water: playerData.resources.water - 1,
+        flowers: playerData.resources.flowers + 1
+      }
+    });
+
     appendLog(transaction, gameId, {
       message: `${playerData.displayName} activated a plant ability at slot ${slotIndex + 1}.`,
       playerId: playerSnap.id,
@@ -299,14 +361,19 @@ export async function resolveRoundUpkeepTx(gameId: string) {
     assert(players.length > 0, "No players found.");
 
     players.forEach((snapshot) => {
-      transaction.update(playerDocRef(gameId, snapshot.id), { resources: snapshot.data().resources + 1 });
+      transaction.update(playerDocRef(gameId, snapshot.id), {
+        resources: {
+          ...snapshot.data().resources,
+          water: snapshot.data().resources.water + 1
+        }
+      });
     });
 
     const isGameOver = gameData.round >= gameData.roundsTotal;
     const nextRound = gameData.round + 1;
 
     transaction.update(gameRef, {
-      phase: isGameOver ? "ended" : "turns",
+      phase: isGameOver ? "ended" : "active",
       status: isGameOver ? "ended" : gameData.status,
       activePlayerId: isGameOver ? null : players[0]?.id ?? null,
       round: isGameOver ? gameData.round : nextRound,

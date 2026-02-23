@@ -101,7 +101,7 @@ export default function GamePage({ params }: GamePageProps) {
   }
 
   const isMyTurn = Boolean(me?.id && game.activePlayerId === me.id);
-  const disableActionControls = loading || (game.phase === "turns" && !isMyTurn);
+  const disableActionControls = loading || (game.phase === "active" && !isMyTurn);
 
   return (
     <main>
@@ -136,7 +136,7 @@ export default function GamePage({ params }: GamePageProps) {
         </>
       ) : null}
 
-      {game.phase === "turns" ? (
+      {game.phase === "active" ? (
         <>
           <p>Active gameplay is in progress.</p>
           <PlayerList players={players} activePlayerId={game.activePlayerId} />

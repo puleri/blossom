@@ -1,7 +1,5 @@
-import type { PlantCard } from "@/lib/game/types";
-
 interface HandPanelProps {
-  hand: PlantCard[];
+  hand: string[];
 }
 
 export function HandPanel({ hand }: HandPanelProps) {
@@ -12,10 +10,8 @@ export function HandPanel({ hand }: HandPanelProps) {
         <p>No cards in hand.</p>
       ) : (
         <ul>
-          {hand.map((card) => (
-            <li key={card.id}>
-              {card.name} (Cost {card.growthCost}, Score {card.scoreValue})
-            </li>
+          {hand.map((cardId) => (
+            <li key={cardId}>{cardId}</li>
           ))}
         </ul>
       )}

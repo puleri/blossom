@@ -4,17 +4,16 @@ import {
   doc,
   getDoc,
   getDocs,
+  query,
   serverTimestamp,
   setDoc,
-  updateDoc
+  updateDoc,
+  orderBy
 } from "firebase/firestore";
 import { firestore } from "@/lib/firestore";
-import {
-  GARDEN_SLOT_DEFAULT,
-  ROUNDS_TOTAL,
-  SETUP_HAND_SIZE,
-  SETUP_STARTING_RESOURCES
-} from "@/lib/game/constants";
+import { GARDEN_SLOT_DEFAULT, ROUNDS_TOTAL, SETUP_HAND_SIZE, SETUP_STARTING_RESOURCES } from "@/lib/game/constants";
+import { PLANT_CARD_IDS } from "@/lib/game/cards/plants";
+import { drawSetupHands, shuffleFisherYates } from "@/lib/game/decks";
 import type { GameDoc, PlayerDoc } from "@/lib/game/types";
 
 function requireUid(uid?: string | null) {
@@ -29,21 +28,11 @@ function createEmptyGameLog(hostName: string) {
   return [`${hostName} created the game.`];
 }
 
-function createStartingHand() {
-  return Array.from({ length: SETUP_HAND_SIZE }, (_, index) => ({
-    id: `starter-${index + 1}`,
-    name: `Starter Seed ${index + 1}`,
-    growthCost: 1,
-    scoreValue: 1,
-    growthTurns: 1
-  }));
-}
-
 export async function createGame(hostDisplayName: string, uid?: string | null) {
   const requiredUid = requireUid(uid);
 
   const gameRef = doc(collection(firestore, "games"));
-  const playerRef = doc(collection(gameRef, "players"));
+  const playerRef = doc(collection(gameRef, "players"), requiredUid);
 
   const gameDoc: Omit<GameDoc, "id"> = {
     createdAt: serverTimestamp(),
@@ -64,10 +53,11 @@ export async function createGame(hostDisplayName: string, uid?: string | null) {
     uid: requiredUid,
     isHost: true,
     joinedAt: serverTimestamp(),
-    resources: SETUP_STARTING_RESOURCES,
+    resources: { ...SETUP_STARTING_RESOURCES },
     score: 0,
-    hand: createStartingHand(),
-    gardenSlots: Array.from({ length: GARDEN_SLOT_DEFAULT }, () => "empty")
+    hand: [],
+    gardenSlots: Array.from({ length: GARDEN_SLOT_DEFAULT }, () => "empty"),
+    keptFromMulligan: false
   };
 
   await setDoc(gameRef, gameDoc);
@@ -91,16 +81,17 @@ export async function joinGame(gameId: string, displayName: string, uid?: string
     throw new Error("Game already started.");
   }
 
-  const playerRef = doc(collection(gameRef, "players"));
+  const playerRef = doc(collection(gameRef, "players"), requiredUid);
   const playerDoc: Omit<PlayerDoc, "id"> = {
     displayName,
     uid: requiredUid,
     isHost: false,
     joinedAt: serverTimestamp(),
-    resources: SETUP_STARTING_RESOURCES,
+    resources: { ...SETUP_STARTING_RESOURCES },
     score: 0,
-    hand: createStartingHand(),
-    gardenSlots: Array.from({ length: GARDEN_SLOT_DEFAULT }, () => "empty")
+    hand: [],
+    gardenSlots: Array.from({ length: GARDEN_SLOT_DEFAULT }, () => "empty"),
+    keptFromMulligan: false
   };
 
   await setDoc(playerRef, playerDoc);
@@ -187,10 +178,24 @@ export async function startGameFromLobby(gameId: string, playerId: string, uid?:
     throw new Error("Game has already started.");
   }
 
-  const playersSnap = await getDocs(collection(gameRef, "players"));
+  const playersSnap = await getDocs(query(collection(gameRef, "players"), orderBy("joinedAt", "asc")));
   if (playersSnap.size < 2) {
     throw new Error("Need at least 2 players to start.");
   }
+
+  const playerIds = playersSnap.docs.map((player) => player.id);
+  const shuffledPlants = shuffleFisherYates(PLANT_CARD_IDS);
+  const { hands } = drawSetupHands(playerIds, shuffledPlants, SETUP_HAND_SIZE);
+
+  await Promise.all(
+    playersSnap.docs.map((snapshot) =>
+      updateDoc(snapshot.ref, {
+        hand: hands[snapshot.id] ?? [],
+        resources: { ...SETUP_STARTING_RESOURCES },
+        keptFromMulligan: false
+      })
+    )
+  );
 
   const firstPlayerId = playersSnap.docs[0]?.id ?? null;
 
