@@ -13,7 +13,7 @@ import { firestore } from "@/lib/firestore";
 import { GARDEN_SLOT_DEFAULT, ROUNDS_TOTAL, SETUP_HAND_SIZE, SETUP_STARTING_RESOURCES } from "@/lib/game/constants";
 import { EVENT_CARDS } from "@/lib/game/cards/events";
 import { PLANT_CARDS, PLANT_CARD_IDS } from "@/lib/game/cards/plants";
-import { drawSetupHands, revealNextEvent, shuffleFisherYates } from "@/lib/game/decks";
+import { drawFromDeck, drawSetupHands, revealNextEvent, shuffleFisherYates } from "@/lib/game/decks";
 import {
   applyAdjacentPairBonuses,
   applyEventToPlayers,
@@ -52,6 +52,15 @@ function getPlantById(plantId: string) {
   return PLANT_CARDS.find((card) => card.id === plantId);
 }
 
+function getNextTurnState(order: string[], currentIndex: number) {
+  const nextIndex = currentIndex + 1;
+  const wrapped = nextIndex >= order.length;
+
+  return wrapped
+    ? { phase: "upkeep" as const, activePlayerId: null, turnIndex: 0 }
+    : { phase: "turns" as const, activePlayerId: order[nextIndex], turnIndex: nextIndex };
+}
+
 export async function createGameTx(hostDisplayName: string, uid: string) {
   assert(uid, "Missing authenticated user (uid). Please refresh and try again.");
   const gameRef = doc(collection(firestore, "games"));
@@ -70,6 +79,7 @@ export async function createGameTx(hostDisplayName: string, uid: string) {
       playerOrder: [],
       turnIndex: 0,
       eventDeck: shuffleFisherYates(EVENT_CARDS),
+      plantDeck: [],
       currentEventId: null,
       lastPhaseResolvedRound: null
     });
@@ -138,7 +148,7 @@ export async function startGameSetupTx(gameId: string, uid: string) {
 
     const orderedPlayerIds = players.map((player) => player.id);
     const shuffledPlantIds = shuffleFisherYates(PLANT_CARD_IDS);
-    const { hands } = drawSetupHands(orderedPlayerIds, shuffledPlantIds, SETUP_HAND_SIZE);
+    const { hands, remainingDeck } = drawSetupHands(orderedPlayerIds, shuffledPlantIds, SETUP_HAND_SIZE);
 
     players.forEach((player) => {
       transaction.update(playerDocRef(gameId, player.id), {
@@ -155,6 +165,7 @@ export async function startGameSetupTx(gameId: string, uid: string) {
       activePlayerId: null,
       playerOrder: orderedPlayerIds,
       turnIndex: 0,
+      plantDeck: remainingDeck,
       currentEventId: null,
       lastPhaseResolvedRound: null
     });
@@ -216,8 +227,18 @@ export async function submitSetupKeepTx(
     });
 
     if (allReady) {
-      transaction.update(gameRef, { phase: "event", activePlayerId: null, turnIndex: 0 });
-      appendLog(transaction, gameId, { message: "All players are ready. Round 1 event phase begins.", type: "system" });
+      const { event, remainingDeck } = revealNextEvent(gameSnap.data().eventDeck);
+      assert(event, "No events remaining in the event deck.");
+      const activePlayerId = gameSnap.data().playerOrder[0] ?? players[0]?.id ?? null;
+
+      transaction.update(gameRef, {
+        phase: "turns",
+        activePlayerId,
+        turnIndex: 0,
+        eventDeck: remainingDeck,
+        currentEventId: event.id
+      });
+      appendLog(transaction, gameId, { message: `Round 1 event drawn: ${event.name}. It resolves at round end.`, type: "system" });
     }
   });
 }
@@ -289,6 +310,10 @@ export async function sowPlantTx(gameId: string, uid: string, plantId: string, s
     const nextSlots = [...playerData.gardenSlots];
     nextSlots[slotIndex] = "seedling";
 
+    const order = gameData.playerOrder.length ? gameData.playerOrder : players.map((snapshot) => snapshot.id);
+    const currentIndex = gameData.turnIndex;
+    assert(order[currentIndex] === playerSnap.id, "Turn order is out of sync.");
+
     transaction.update(playerDocRef(gameId, playerSnap.id), {
       hand: playerData.hand.filter((cardId) => cardId !== plantId),
       gardenSlots: nextSlots,
@@ -303,6 +328,8 @@ export async function sowPlantTx(gameId: string, uid: string, plantId: string, s
       playerId: playerSnap.id,
       type: "action"
     });
+
+    transaction.update(gameDocRef(gameId), getNextTurnState(order, currentIndex));
   });
 }
 
@@ -326,6 +353,10 @@ export async function waterPlantTx(gameId: string, uid: string, slotIndex: numbe
     const nextSlots = [...playerData.gardenSlots];
     nextSlots[slotIndex] = "grown";
 
+    const order = gameData.playerOrder.length ? gameData.playerOrder : players.map((snapshot) => snapshot.id);
+    const currentIndex = gameData.turnIndex;
+    assert(order[currentIndex] === playerSnap.id, "Turn order is out of sync.");
+
     transaction.update(playerDocRef(gameId, playerSnap.id), {
       gardenSlots: nextSlots,
       resources: {
@@ -335,7 +366,49 @@ export async function waterPlantTx(gameId: string, uid: string, slotIndex: numbe
       score: playerData.score + 1
     });
 
-    appendLog(transaction, gameId, { message: `${playerData.displayName} watered slot ${slotIndex + 1}.`, playerId: playerSnap.id, type: "action" });
+    appendLog(transaction, gameId, { message: `${playerData.displayName} visited the well and watered slot ${slotIndex + 1}.`, playerId: playerSnap.id, type: "action" });
+
+    transaction.update(gameDocRef(gameId), getNextTurnState(order, currentIndex));
+  });
+}
+
+export async function drawPlantCardTx(gameId: string, uid: string) {
+  const players = await getOrderedPlayers(gameId);
+
+  return runTransaction(firestore, async (transaction) => {
+    const gameRef = gameDocRef(gameId);
+    const gameSnap = await transaction.get(gameRef);
+    assert(gameSnap.exists(), "Game not found.");
+    const gameData = gameSnap.data();
+    requireTurnPhase(gameData);
+
+    const playerSnap = getPlayerByUid(players, uid);
+    assert(gameData.activePlayerId === playerSnap.id, "Only the active player can perform turn actions.");
+
+    const order = gameData.playerOrder.length ? gameData.playerOrder : players.map((snapshot) => snapshot.id);
+    const currentIndex = gameData.turnIndex;
+    assert(order[currentIndex] === playerSnap.id, "Turn order is out of sync.");
+
+    const draw = drawFromDeck(gameData.plantDeck ?? [], 1);
+    assert(draw.drawn.length === 1, "Plant deck is empty.");
+
+    const playerData = playerSnap.data();
+    const drawnCardId = draw.drawn[0];
+
+    transaction.update(playerDocRef(gameId, playerSnap.id), {
+      hand: [...playerData.hand, drawnCardId]
+    });
+
+    transaction.update(gameRef, {
+      plantDeck: draw.remainingDeck,
+      ...getNextTurnState(order, currentIndex)
+    });
+
+    appendLog(transaction, gameId, {
+      message: `${playerData.displayName} drew a plant card (${drawnCardId}).`,
+      playerId: playerSnap.id,
+      type: "action"
+    });
   });
 }
 
@@ -426,7 +499,7 @@ export async function resolveRoundUpkeepTx(gameId: string, uid: string) {
     assert(hostSnap, "Host player not found.");
     assert(hostSnap.data().uid === uid, "Only the host can resolve upkeep.");
 
-    const updatedPlayers = players.map((snapshot) => {
+    const updatedPlayersAfterUpkeep = players.map((snapshot) => {
       const basePlayer = { id: snapshot.id, ...snapshot.data() };
       const afterDecay = applyPlantDecayAndDeaths(basePlayer);
       const afterAdjacentBonuses = applyAdjacentPairBonuses(afterDecay);
@@ -441,6 +514,9 @@ export async function resolveRoundUpkeepTx(gameId: string, uid: string) {
       };
     });
 
+    const currentEvent = EVENT_CARDS.find((event) => event.id === gameData.currentEventId) ?? null;
+    const updatedPlayers = currentEvent ? applyEventToPlayers(updatedPlayersAfterUpkeep, currentEvent) : updatedPlayersAfterUpkeep;
+
     const nextRound = gameData.round + 1;
     const isGameOver = nextRound > gameData.roundsTotal;
 
@@ -453,18 +529,28 @@ export async function resolveRoundUpkeepTx(gameId: string, uid: string) {
     });
 
     transaction.update(gameRef, {
-      phase: isGameOver ? "ended" : "event",
+      phase: isGameOver ? "ended" : "turns",
       status: isGameOver ? "ended" : gameData.status,
-      activePlayerId: null,
+      activePlayerId: isGameOver ? null : gameData.playerOrder[0] ?? players[0]?.id ?? null,
       turnIndex: 0,
       round: isGameOver ? gameData.round : nextRound,
       lastPhaseResolvedRound: gameData.round
     });
 
+    if (!isGameOver) {
+      const { event, remainingDeck } = revealNextEvent(gameData.eventDeck);
+      assert(event, "No events remaining in the event deck.");
+      transaction.update(gameRef, {
+        eventDeck: remainingDeck,
+        currentEventId: event.id
+      });
+      appendLog(transaction, gameId, { message: `Round ${nextRound} event drawn: ${event.name}. It resolves at round end.`, type: "system" });
+    }
+
     appendLog(transaction, gameId, {
       message: isGameOver
-        ? `Round ${gameData.round} upkeep resolved. Game ended.`
-        : `Round ${gameData.round} upkeep resolved. Round ${nextRound} event phase begins.`,
+        ? `Round ${gameData.round} upkeep and event resolved. Game ended.`
+        : `Round ${gameData.round} upkeep resolved, then event resolved. Round ${nextRound} turns begin.`,
       type: "system"
     });
   });

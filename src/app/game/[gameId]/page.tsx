@@ -9,14 +9,13 @@ import { HandPanel } from "@/components/game/HandPanel";
 import { GameLog } from "@/components/game/GameLog";
 import { leaveGame, startGameFromLobby } from "@/lib/game/gameService";
 import {
-  activatePlantAbilityTx,
-  advanceTurnOrRoundTx,
-  resolveRoundEventTx,
+  drawPlantCardTx,
   resolveRoundUpkeepTx,
   sowPlantTx,
   submitSetupKeepTx,
   waterPlantTx
 } from "@/lib/game/actions";
+import { EVENT_CARDS } from "@/lib/game/cards/events";
 import { PLANT_CARDS } from "@/lib/game/cards/plants";
 import { useAuthUser } from "@/hooks/useAuthUser";
 import { useGame } from "@/hooks/useGame";
@@ -173,6 +172,7 @@ export default function GamePage({ params }: GamePageProps) {
   const disableActionControls = loading || (game.phase === "turns" && !isMyTurn);
 
   const currentPlant = PLANT_CARDS.find((plant) => plant.id === selectedPlantId) ?? null;
+  const currentEvent = EVENT_CARDS.find((event) => event.id === game.currentEventId) ?? null;
   const isHost = Boolean(me?.id && me.id === game.hostPlayerId);
 
   return (
@@ -266,32 +266,14 @@ export default function GamePage({ params }: GamePageProps) {
         </>
       ) : null}
 
-      {game.phase === "event" ? (
-        <>
-          <p>Round event is being resolved by the host.</p>
-          <PlayerList players={players} activePlayerId={game.activePlayerId} />
-          {isHost ? (
-            <button
-              onClick={() =>
-                runAction("resolve-event", async () => {
-                  if (!user?.uid) {
-                    throw new Error("Missing authenticated user id.");
-                  }
-
-                  await resolveRoundEventTx(gameId, user.uid);
-                })
-              }
-              disabled={Boolean(busyAction)}
-            >
-              {busyAction === "resolve-event" ? "Resolving..." : "Resolve Event"}
-            </button>
-          ) : null}
-        </>
-      ) : null}
-
       {game.phase === "turns" ? (
         <>
           <p>Turns phase is in progress.</p>
+          {currentEvent ? (
+            <p>
+              Round event in play: <strong>{currentEvent.name}</strong> — {currentEvent.description} (resolves at round end)
+            </p>
+          ) : null}
           <PlayerList players={players} activePlayerId={game.activePlayerId} />
           {currentPlayer ? <HandPanel hand={currentPlayer.hand} /> : null}
           {currentPlayer ? <GardenTableau slots={currentPlayer.gardenSlots} /> : null}
@@ -344,31 +326,19 @@ export default function GamePage({ params }: GamePageProps) {
                   }
                   disabled={Boolean(busyAction)}
                 >
-                  {busyAction === "water" ? "Watering..." : "Water selected slot"}
+                  {busyAction === "water" ? "Watering..." : "Go to the water well"}
                 </button>
 
                 <button
                   onClick={() =>
-                    runAction("activate", async () => {
+                    runAction("draw-plant", async () => {
                       if (!user?.uid) throw new Error("Missing authenticated user id.");
-                      await activatePlantAbilityTx(gameId, user.uid, selectedSlot);
+                      await drawPlantCardTx(gameId, user.uid);
                     })
                   }
                   disabled={Boolean(busyAction)}
                 >
-                  {busyAction === "activate" ? "Activating..." : "Activate selected slot"}
-                </button>
-
-                <button
-                  onClick={() =>
-                    runAction("end-turn", async () => {
-                      if (!user?.uid) throw new Error("Missing authenticated user id.");
-                      await advanceTurnOrRoundTx(gameId, user.uid);
-                    })
-                  }
-                  disabled={Boolean(busyAction)}
-                >
-                  {busyAction === "end-turn" ? "Ending..." : "End turn"}
+                  {busyAction === "draw-plant" ? "Drawing..." : "Draw a plant card"}
                 </button>
               </div>
             </section>
@@ -382,6 +352,11 @@ export default function GamePage({ params }: GamePageProps) {
       {game.phase === "upkeep" ? (
         <>
           <p>Upkeep phase: waiting for host resolution.</p>
+          {currentEvent ? (
+            <p>
+              Event waiting to resolve: <strong>{currentEvent.name}</strong> — {currentEvent.description}
+            </p>
+          ) : null}
           <PlayerList players={players} activePlayerId={game.activePlayerId} />
           {isHost ? (
             <button

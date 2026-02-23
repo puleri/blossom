@@ -46,6 +46,7 @@ export async function createGame(hostDisplayName: string, uid?: string | null) {
     playerOrder: [],
     turnIndex: 0,
     eventDeck: [],
+    plantDeck: [],
     currentEventId: null,
     lastPhaseResolvedRound: null,
     log: createEmptyGameLog(hostDisplayName)
@@ -188,7 +189,7 @@ export async function startGameFromLobby(gameId: string, playerId: string, uid?:
 
   const playerIds = playersSnap.docs.map((player) => player.id);
   const shuffledPlants = shuffleFisherYates(PLANT_CARD_IDS);
-  const { hands } = drawSetupHands(playerIds, shuffledPlants, SETUP_HAND_SIZE);
+  const { hands, remainingDeck } = drawSetupHands(playerIds, shuffledPlants, SETUP_HAND_SIZE);
 
   await Promise.all(
     playersSnap.docs.map((snapshot) =>
@@ -208,6 +209,7 @@ export async function startGameFromLobby(gameId: string, playerId: string, uid?:
     activePlayerId: null,
     playerOrder: playerIds,
     turnIndex: 0,
+    plantDeck: remainingDeck,
     currentEventId: null,
     lastPhaseResolvedRound: null,
     log: [...(gameData.log ?? []), "Game started. Setup phase begins."]
