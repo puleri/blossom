@@ -1,21 +1,35 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createGame, joinGame } from "@/lib/game/gameService";
+import { getLocalDisplayName, setLocalDisplayName } from "@/lib/auth";
+import { useAuthUser } from "@/hooks/useAuthUser";
 
 export default function Home() {
   const router = useRouter();
+  const { user } = useAuthUser();
   const [displayName, setDisplayName] = useState("");
   const [joinId, setJoinId] = useState("");
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setDisplayName(getLocalDisplayName());
+  }, []);
 
   async function onCreateGame(event: FormEvent) {
     event.preventDefault();
     setError(null);
 
+    if (!user?.uid) {
+      setError("Authentication is still loading. Please wait a moment and try again.");
+      return;
+    }
+
     try {
-      const { gameId, playerId } = await createGame(displayName || "Host");
+      const safeDisplayName = displayName || "Host";
+      const { gameId, playerId } = await createGame(safeDisplayName, user.uid);
+      setLocalDisplayName(safeDisplayName);
       window.localStorage.setItem(`blossom:${gameId}:playerId`, playerId);
       router.push(`/game/${gameId}`);
     } catch (createError) {
@@ -27,8 +41,15 @@ export default function Home() {
     event.preventDefault();
     setError(null);
 
+    if (!user?.uid) {
+      setError("Authentication is still loading. Please wait a moment and try again.");
+      return;
+    }
+
     try {
-      const { gameId, playerId } = await joinGame(joinId.trim(), displayName || "Guest");
+      const safeDisplayName = displayName || "Guest";
+      const { gameId, playerId } = await joinGame(joinId.trim(), safeDisplayName, user.uid);
+      setLocalDisplayName(safeDisplayName);
       window.localStorage.setItem(`blossom:${gameId}:playerId`, playerId);
       router.push(`/game/${gameId}`);
     } catch (joinError) {

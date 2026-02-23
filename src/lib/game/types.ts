@@ -23,6 +23,7 @@ export interface EventCard {
 export interface PlayerDoc {
   id: string;
   displayName: string;
+  uid: string;
   isHost: boolean;
   joinedAt?: unknown;
   resources: number;
