@@ -48,6 +48,7 @@ export default function GamePage({ params }: GamePageProps) {
     () => players.find((player) => player.id === me?.id) ?? null,
     [players, me?.id]
   );
+  const currentHandKey = currentPlayer?.hand.join("|") ?? "";
 
   useEffect(() => {
     if (gameError) {
@@ -74,18 +75,11 @@ export default function GamePage({ params }: GamePageProps) {
     if (!currentPlayer) {
       setSetupKeptPlantIds([]);
       setSetupDiscardedResources([]);
+      setSelectedPlantId("");
       return;
     }
 
     setSetupKeptPlantIds(currentPlayer.hand);
-    setSetupDiscardedResources((previous) => {
-      if (previous.length === currentPlayer.hand.length) {
-        return previous;
-      }
-
-      return currentPlayer.hand.map((_, index) => (index < 3 ? "water" : "seeds"));
-    });
-
     setSelectedPlantId((previous) => {
       if (previous && currentPlayer.hand.includes(previous)) {
         return previous;
@@ -93,7 +87,17 @@ export default function GamePage({ params }: GamePageProps) {
 
       return currentPlayer.hand[0] ?? "";
     });
-  }, [currentPlayer]);
+  }, [currentHandKey, currentPlayer]);
+
+  useEffect(() => {
+    setSetupDiscardedResources((previous) => {
+      if (previous.length === setupKeptPlantIds.length) {
+        return previous;
+      }
+
+      return setupKeptPlantIds.map((_, index) => previous[index] ?? (index < 3 ? "water" : "seeds"));
+    });
+  }, [setupKeptPlantIds]);
 
   if (loading) {
     return <main>Loading game...</main>;
