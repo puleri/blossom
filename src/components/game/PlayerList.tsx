@@ -14,7 +14,7 @@ export function PlayerList({ players, activePlayerId }: PlayerListProps) {
           <li key={player.id}>
             {player.displayName}
             {player.isHost ? " (Host)" : ""}
-            {player.id === activePlayerId ? " • Active" : ""} — Score: {player.score}, Resources: {player.resources}
+            {player.id === activePlayerId ? " • Active" : ""} — Score: {player.score}, Water: {player.resources.water}, Seeds: {player.resources.seeds}, Flowers: {player.resources.flowers}, Bugs: {player.resources.bugs}
           </li>
         ))}
       </ul>

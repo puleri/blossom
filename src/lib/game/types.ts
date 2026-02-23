@@ -1,22 +1,34 @@
 export type GameStatus = "lobby" | "in_progress" | "ended";
 
-export type Phase = "lobby" | "setup" | "turns" | "upkeep" | "ended";
+export type Phase = "lobby" | "setup" | "active" | "turns" | "upkeep" | "ended";
 
 export type GardenSlotState = "empty" | "seedling" | "grown" | "withered";
+
+export type ResourceKey = "water" | "seeds" | "flowers" | "bugs";
+
+export interface PlayerResources {
+  water: number;
+  seeds: number;
+  flowers: number;
+  bugs: number;
+}
 
 export interface PlantCard {
   id: string;
   name: string;
-  growthCost: number;
-  scoreValue: number;
-  growthTurns: number;
+  seedCost: number;
+  points: number;
+  waterCapacity: number;
+  decayPerRound: number;
+  requiresUpkeep: boolean;
+  abilities: string[];
 }
 
 export interface EventCard {
   id: string;
   name: string;
   description: string;
-  effectType: "resource" | "garden" | "draw" | "score";
+  effectType: ResourceKey | "points";
   value: number;
 }
 
@@ -26,11 +38,11 @@ export interface PlayerDoc {
   uid: string;
   isHost: boolean;
   joinedAt?: unknown;
-  resources: number;
+  resources: PlayerResources;
   score: number;
-  hand: PlantCard[];
+  hand: string[];
   gardenSlots: GardenSlotState[];
-  setupKept?: boolean;
+  keptFromMulligan: boolean;
 }
 
 export interface GameDoc {
