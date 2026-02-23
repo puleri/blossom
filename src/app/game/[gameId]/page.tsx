@@ -8,11 +8,22 @@ import { GardenTableau } from "@/components/game/GardenTableau";
 import { HandPanel } from "@/components/game/HandPanel";
 import { GameLog } from "@/components/game/GameLog";
 import { leaveGame, startGameFromLobby } from "@/lib/game/gameService";
+import {
+  activatePlantAbilityTx,
+  advanceTurnOrRoundTx,
+  resolveRoundEventTx,
+  resolveRoundUpkeepTx,
+  sowPlantTx,
+  submitSetupKeepTx,
+  waterPlantTx
+} from "@/lib/game/actions";
+import { PLANT_CARDS } from "@/lib/game/cards/plants";
 import { useAuthUser } from "@/hooks/useAuthUser";
 import { useGame } from "@/hooks/useGame";
 import { useGameLog } from "@/hooks/useGameLog";
 import { useMe } from "@/hooks/useMe";
 import { usePlayers } from "@/hooks/usePlayers";
+import type { ResourceKey } from "@/lib/game/types";
 
 interface GamePageProps {
   params: Promise<{ gameId: string }>;
@@ -27,6 +38,11 @@ export default function GamePage({ params }: GamePageProps) {
   const { data: me, loading: meLoading, error: meError } = useMe(gameId, user?.uid);
   const { data: logEntries, loading: logLoading, error: logError } = useGameLog(gameId);
   const [error, setError] = useState<string | null>(null);
+  const [setupKeptPlantIds, setSetupKeptPlantIds] = useState<string[]>([]);
+  const [setupDiscardedResources, setSetupDiscardedResources] = useState<ResourceKey[]>([]);
+  const [selectedPlantId, setSelectedPlantId] = useState<string>("");
+  const [selectedSlot, setSelectedSlot] = useState<number>(0);
+  const [busyAction, setBusyAction] = useState<string | null>(null);
   const loading = gameLoading || playersLoading || meLoading;
 
   const currentPlayer = useMemo(
@@ -55,6 +71,31 @@ export default function GamePage({ params }: GamePageProps) {
     }
   }, [gameError, playersError, meError, logError]);
 
+  useEffect(() => {
+    if (!currentPlayer) {
+      setSetupKeptPlantIds([]);
+      setSetupDiscardedResources([]);
+      return;
+    }
+
+    setSetupKeptPlantIds(currentPlayer.hand);
+    setSetupDiscardedResources((previous) => {
+      if (previous.length === currentPlayer.hand.length) {
+        return previous;
+      }
+
+      return currentPlayer.hand.map((_, index) => (index < 3 ? "water" : "seeds"));
+    });
+
+    setSelectedPlantId((previous) => {
+      if (previous && currentPlayer.hand.includes(previous)) {
+        return previous;
+      }
+
+      return currentPlayer.hand[0] ?? "";
+    });
+  }, [currentPlayer]);
+
   if (loading) {
     return <main>Loading game...</main>;
   }
@@ -81,6 +122,33 @@ export default function GamePage({ params }: GamePageProps) {
     }
   }
 
+  function toggleSetupPlant(plantId: string) {
+    setSetupKeptPlantIds((previous) => {
+      if (previous.includes(plantId)) {
+        const next = previous.filter((id) => id !== plantId);
+        setSetupDiscardedResources((resources) => resources.slice(0, next.length));
+        return next;
+      }
+
+      const next = [...previous, plantId];
+      setSetupDiscardedResources((resources) => [...resources, "water" as ResourceKey].slice(0, next.length));
+      return next;
+    });
+  }
+
+  async function runAction(actionName: string, action: () => Promise<void>) {
+    setError(null);
+    setBusyAction(actionName);
+
+    try {
+      await action();
+    } catch (actionError) {
+      setError(actionError instanceof Error ? actionError.message : "Action failed.");
+    } finally {
+      setBusyAction(null);
+    }
+  }
+
   async function handleLeaveGame() {
     if (!user?.uid) {
       setError("Cannot leave game without an authenticated user id (uid).");
@@ -103,6 +171,9 @@ export default function GamePage({ params }: GamePageProps) {
 
   const isMyTurn = Boolean(me?.id && game.activePlayerId === me.id);
   const disableActionControls = loading || (game.phase === "turns" && !isMyTurn);
+
+  const currentPlant = PLANT_CARDS.find((plant) => plant.id === selectedPlantId) ?? null;
+  const isHost = Boolean(me?.id && me.id === game.hostPlayerId);
 
   return (
     <main>
@@ -130,10 +201,68 @@ export default function GamePage({ params }: GamePageProps) {
 
       {game.phase === "setup" ? (
         <>
-          <p>Setup phase: review your hand and prepare your garden.</p>
+          <p>Setup phase: keep 0-5 plants. Discard one resource per kept plant.</p>
           <PlayerList players={players} activePlayerId={game.activePlayerId} />
           {currentPlayer ? <HandPanel hand={currentPlayer.hand} /> : null}
           {currentPlayer ? <GardenTableau slots={currentPlayer.gardenSlots} /> : null}
+
+          {currentPlayer && !currentPlayer.keptFromMulligan ? (
+            <section>
+              <h3>Choose plants to keep</h3>
+              <ul>
+                {currentPlayer.hand.map((cardId) => (
+                  <li key={cardId}>
+                    <label>
+                      <input
+                        type="checkbox"
+                        checked={setupKeptPlantIds.includes(cardId)}
+                        onChange={() => toggleSetupPlant(cardId)}
+                        disabled={Boolean(busyAction)}
+                      />
+                      {cardId}
+                    </label>
+                  </li>
+                ))}
+              </ul>
+
+              <h3>Discard resources ({setupKeptPlantIds.length} required)</h3>
+              {setupDiscardedResources.map((resource, index) => (
+                <label key={`discard-${index}`} style={{ display: "block" }}>
+                  Discard #{index + 1}
+                  <select
+                    value={resource}
+                    onChange={(event) => {
+                      const value = event.target.value as ResourceKey;
+                      setSetupDiscardedResources((previous) =>
+                        previous.map((existing, resourceIndex) => (resourceIndex === index ? value : existing))
+                      );
+                    }}
+                    disabled={Boolean(busyAction)}
+                  >
+                    <option value="water">Water</option>
+                    <option value="seeds">Seed</option>
+                  </select>
+                </label>
+              ))}
+
+              <button
+                onClick={() =>
+                  runAction("setup-submit", async () => {
+                    if (!user?.uid) {
+                      throw new Error("Missing authenticated user id.");
+                    }
+
+                    await submitSetupKeepTx(gameId, user.uid, setupKeptPlantIds, setupDiscardedResources);
+                  })
+                }
+                disabled={Boolean(busyAction) || setupDiscardedResources.length !== setupKeptPlantIds.length}
+              >
+                {busyAction === "setup-submit" ? "Submitting..." : "Submit setup"}
+              </button>
+            </section>
+          ) : null}
+
+          {currentPlayer?.keptFromMulligan ? <p>Setup submitted. Waiting for other players.</p> : null}
         </>
       ) : null}
 
@@ -141,6 +270,22 @@ export default function GamePage({ params }: GamePageProps) {
         <>
           <p>Round event is being resolved by the host.</p>
           <PlayerList players={players} activePlayerId={game.activePlayerId} />
+          {isHost ? (
+            <button
+              onClick={() =>
+                runAction("resolve-event", async () => {
+                  if (!user?.uid) {
+                    throw new Error("Missing authenticated user id.");
+                  }
+
+                  await resolveRoundEventTx(gameId, user.uid);
+                })
+              }
+              disabled={Boolean(busyAction)}
+            >
+              {busyAction === "resolve-event" ? "Resolving..." : "Resolve Event"}
+            </button>
+          ) : null}
         </>
       ) : null}
 
@@ -150,6 +295,86 @@ export default function GamePage({ params }: GamePageProps) {
           <PlayerList players={players} activePlayerId={game.activePlayerId} />
           {currentPlayer ? <HandPanel hand={currentPlayer.hand} /> : null}
           {currentPlayer ? <GardenTableau slots={currentPlayer.gardenSlots} /> : null}
+
+          {isMyTurn && currentPlayer ? (
+            <section>
+              <h3>Your turn action</h3>
+              <label>
+                Plant from hand
+                <select value={selectedPlantId} onChange={(event) => setSelectedPlantId(event.target.value)}>
+                  {currentPlayer.hand.map((plantId) => (
+                    <option key={plantId} value={plantId}>
+                      {plantId}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label>
+                Slot
+                <select value={selectedSlot} onChange={(event) => setSelectedSlot(Number(event.target.value))}>
+                  {currentPlayer.gardenSlots.map((_, index) => (
+                    <option key={`slot-${index}`} value={index}>
+                      Slot {index + 1}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <button
+                  onClick={() =>
+                    runAction("sow", async () => {
+                      if (!user?.uid) throw new Error("Missing authenticated user id.");
+                      if (!selectedPlantId) throw new Error("Select a plant to sow.");
+                      await sowPlantTx(gameId, user.uid, selectedPlantId, selectedSlot);
+                    })
+                  }
+                  disabled={Boolean(busyAction) || !selectedPlantId || !currentPlant || currentPlayer.resources.seeds < currentPlant.seedCost}
+                >
+                  {busyAction === "sow" ? "Sowing..." : "Sow"}
+                </button>
+
+                <button
+                  onClick={() =>
+                    runAction("water", async () => {
+                      if (!user?.uid) throw new Error("Missing authenticated user id.");
+                      await waterPlantTx(gameId, user.uid, selectedSlot);
+                    })
+                  }
+                  disabled={Boolean(busyAction)}
+                >
+                  {busyAction === "water" ? "Watering..." : "Water selected slot"}
+                </button>
+
+                <button
+                  onClick={() =>
+                    runAction("activate", async () => {
+                      if (!user?.uid) throw new Error("Missing authenticated user id.");
+                      await activatePlantAbilityTx(gameId, user.uid, selectedSlot);
+                    })
+                  }
+                  disabled={Boolean(busyAction)}
+                >
+                  {busyAction === "activate" ? "Activating..." : "Activate selected slot"}
+                </button>
+
+                <button
+                  onClick={() =>
+                    runAction("end-turn", async () => {
+                      if (!user?.uid) throw new Error("Missing authenticated user id.");
+                      await advanceTurnOrRoundTx(gameId, user.uid);
+                    })
+                  }
+                  disabled={Boolean(busyAction)}
+                >
+                  {busyAction === "end-turn" ? "Ending..." : "End turn"}
+                </button>
+              </div>
+            </section>
+          ) : (
+            <p>Waiting for the active player to act.</p>
+          )}
         </>
       ) : null}
 
@@ -158,6 +383,22 @@ export default function GamePage({ params }: GamePageProps) {
         <>
           <p>Upkeep phase: waiting for host resolution.</p>
           <PlayerList players={players} activePlayerId={game.activePlayerId} />
+          {isHost ? (
+            <button
+              onClick={() =>
+                runAction("resolve-upkeep", async () => {
+                  if (!user?.uid) {
+                    throw new Error("Missing authenticated user id.");
+                  }
+
+                  await resolveRoundUpkeepTx(gameId, user.uid);
+                })
+              }
+              disabled={Boolean(busyAction)}
+            >
+              {busyAction === "resolve-upkeep" ? "Resolving..." : "Resolve Upkeep"}
+            </button>
+          ) : null}
         </>
       ) : null}
 
