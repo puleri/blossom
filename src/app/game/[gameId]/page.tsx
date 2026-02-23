@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { use, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { GameHeader } from "@/components/game/GameHeader";
 import { PlayerList } from "@/components/game/PlayerList";
@@ -15,16 +15,17 @@ import { useMe } from "@/hooks/useMe";
 import { usePlayers } from "@/hooks/usePlayers";
 
 interface GamePageProps {
-  params: { gameId: string };
+  params: Promise<{ gameId: string }>;
 }
 
 export default function GamePage({ params }: GamePageProps) {
+  const { gameId } = use(params);
   const router = useRouter();
   const { user } = useAuthUser();
-  const { data: game, loading: gameLoading, error: gameError } = useGame(params.gameId);
-  const { data: players, loading: playersLoading, error: playersError } = usePlayers(params.gameId);
-  const { data: me, loading: meLoading, error: meError } = useMe(params.gameId, user?.uid);
-  const { data: logEntries, loading: logLoading, error: logError } = useGameLog(params.gameId);
+  const { data: game, loading: gameLoading, error: gameError } = useGame(gameId);
+  const { data: players, loading: playersLoading, error: playersError } = usePlayers(gameId);
+  const { data: me, loading: meLoading, error: meError } = useMe(gameId, user?.uid);
+  const { data: logEntries, loading: logLoading, error: logError } = useGameLog(gameId);
   const [error, setError] = useState<string | null>(null);
   const loading = gameLoading || playersLoading || meLoading;
 
@@ -74,7 +75,7 @@ export default function GamePage({ params }: GamePageProps) {
     }
 
     try {
-      await startGameFromLobby(params.gameId, me.id, user.uid);
+      await startGameFromLobby(gameId, me.id, user.uid);
     } catch (startError) {
       setError(startError instanceof Error ? startError.message : "Could not start game.");
     }
@@ -92,8 +93,8 @@ export default function GamePage({ params }: GamePageProps) {
     }
 
     try {
-      await leaveGame(params.gameId, me.id, user.uid);
-      window.localStorage.removeItem(`blossom:${params.gameId}:playerId`);
+      await leaveGame(gameId, me.id, user.uid);
+      window.localStorage.removeItem(`blossom:${gameId}:playerId`);
       router.push("/");
     } catch (leaveError) {
       setError(leaveError instanceof Error ? leaveError.message : "Could not leave game.");
