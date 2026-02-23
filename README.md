@@ -20,3 +20,7 @@ Next.js App Router starter wired for Firebase + Firestore basics.
 ## Firestore health check
 
 The homepage loads a `health/status` document and prints the `state` field. Update that document in your Firestore project to verify connectivity.
+
+## Gameplay MVP notes
+
+- **Dry Heat simplification:** for this MVP, resolving the `dryHeat` event only applies the shared event resource delta (`water -1`, minimum 0) to each player. It does not trigger any extra plant-specific bonuses or penalties.

@@ -101,7 +101,7 @@ export default function GamePage({ params }: GamePageProps) {
   }
 
   const isMyTurn = Boolean(me?.id && game.activePlayerId === me.id);
-  const disableActionControls = loading || (game.phase === "active" && !isMyTurn);
+  const disableActionControls = loading || (game.phase === "turns" && !isMyTurn);
 
   return (
     <main>
@@ -136,12 +136,27 @@ export default function GamePage({ params }: GamePageProps) {
         </>
       ) : null}
 
-      {game.phase === "active" ? (
+      {game.phase === "event" ? (
         <>
-          <p>Active gameplay is in progress.</p>
+          <p>Round event is being resolved by the host.</p>
+          <PlayerList players={players} activePlayerId={game.activePlayerId} />
+        </>
+      ) : null}
+
+      {game.phase === "turns" ? (
+        <>
+          <p>Turns phase is in progress.</p>
           <PlayerList players={players} activePlayerId={game.activePlayerId} />
           {currentPlayer ? <HandPanel hand={currentPlayer.hand} /> : null}
           {currentPlayer ? <GardenTableau slots={currentPlayer.gardenSlots} /> : null}
+        </>
+      ) : null}
+
+      
+      {game.phase === "upkeep" ? (
+        <>
+          <p>Upkeep phase: waiting for host resolution.</p>
+          <PlayerList players={players} activePlayerId={game.activePlayerId} />
         </>
       ) : null}
 

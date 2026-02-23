@@ -43,7 +43,10 @@ export async function createGame(hostDisplayName: string, uid?: string | null) {
     roundsTotal: ROUNDS_TOTAL,
     hostPlayerId: playerRef.id,
     activePlayerId: null,
+    playerOrder: [],
+    turnIndex: 0,
     eventDeck: [],
+    currentEventId: null,
     lastPhaseResolvedRound: null,
     log: createEmptyGameLog(hostDisplayName)
   };
@@ -197,13 +200,15 @@ export async function startGameFromLobby(gameId: string, playerId: string, uid?:
     )
   );
 
-  const firstPlayerId = playersSnap.docs[0]?.id ?? null;
 
   await updateDoc(gameRef, {
     status: "in_progress",
     phase: "setup",
     round: 1,
-    activePlayerId: firstPlayerId,
+    activePlayerId: null,
+    playerOrder: playerIds,
+    turnIndex: 0,
+    currentEventId: null,
     lastPhaseResolvedRound: null,
     log: [...(gameData.log ?? []), "Game started. Setup phase begins."]
   });

@@ -13,7 +13,14 @@ import { firestore } from "@/lib/firestore";
 import { GARDEN_SLOT_DEFAULT, ROUNDS_TOTAL, SETUP_HAND_SIZE, SETUP_STARTING_RESOURCES } from "@/lib/game/constants";
 import { EVENT_CARDS } from "@/lib/game/cards/events";
 import { PLANT_CARDS, PLANT_CARD_IDS } from "@/lib/game/cards/plants";
-import { drawSetupHands, shuffleFisherYates } from "@/lib/game/decks";
+import { drawSetupHands, revealNextEvent, shuffleFisherYates } from "@/lib/game/decks";
+import {
+  applyAdjacentPairBonuses,
+  applyEventToPlayers,
+  applyPlantDecayAndDeaths,
+  collectFlowerTokens,
+  computePlayerScore
+} from "@/lib/game/engine";
 import { gameDocRef, gameLogColRef, playerDocRef, playersColRef } from "@/lib/game/refs";
 import type { GameDoc, GameLogEntryDoc, PlayerDoc, ResourceKey } from "@/lib/game/types";
 
@@ -27,7 +34,7 @@ function appendLog(transaction: Transaction, gameId: string, entry: Omit<GameLog
 }
 
 function requireTurnPhase(game: Omit<GameDoc, "id">) {
-  assert(game.phase === "active" || game.phase === "turns", "This action is only available during the active phase.");
+  assert(game.phase === "turns", "This action is only available during turns phase.");
 }
 
 function getPlayerByUid(snapshots: QueryDocumentSnapshot<Omit<PlayerDoc, "id">>[], uid: string) {
@@ -60,7 +67,10 @@ export async function createGameTx(hostDisplayName: string, uid: string) {
       roundsTotal: ROUNDS_TOTAL,
       hostPlayerId: hostRef.id,
       activePlayerId: null,
+      playerOrder: [],
+      turnIndex: 0,
       eventDeck: shuffleFisherYates(EVENT_CARDS),
+      currentEventId: null,
       lastPhaseResolvedRound: null
     });
 
@@ -142,7 +152,10 @@ export async function startGameSetupTx(gameId: string, uid: string) {
       status: "in_progress",
       phase: "setup",
       round: 1,
-      activePlayerId: players[0]?.id ?? null,
+      activePlayerId: null,
+      playerOrder: orderedPlayerIds,
+      turnIndex: 0,
+      currentEventId: null,
       lastPhaseResolvedRound: null
     });
 
@@ -203,9 +216,51 @@ export async function submitSetupKeepTx(
     });
 
     if (allReady) {
-      transaction.update(gameRef, { phase: "active" });
-      appendLog(transaction, gameId, { message: "All players are ready. Active phase begins.", type: "system" });
+      transaction.update(gameRef, { phase: "event", activePlayerId: null, turnIndex: 0 });
+      appendLog(transaction, gameId, { message: "All players are ready. Round 1 event phase begins.", type: "system" });
     }
+  });
+}
+
+export async function resolveRoundEventTx(gameId: string, uid: string) {
+  const players = await getOrderedPlayers(gameId);
+
+  return runTransaction(firestore, async (transaction) => {
+    const gameRef = gameDocRef(gameId);
+    const gameSnap = await transaction.get(gameRef);
+    assert(gameSnap.exists(), "Game not found.");
+
+    const gameData = gameSnap.data();
+    assert(gameData.phase === "event", "Round event can only be resolved during event phase.");
+    assert(players.length > 0, "No players found.");
+
+    const hostSnap = players.find((snapshot) => snapshot.id === gameData.hostPlayerId);
+    assert(hostSnap, "Host player not found.");
+    assert(hostSnap.data().uid === uid, "Only the host can resolve the round event.");
+
+    const { event, remainingDeck } = revealNextEvent(gameData.eventDeck);
+    assert(event, "No events remaining in the event deck.");
+
+    const nextPlayers = applyEventToPlayers(
+      players.map((snapshot) => ({ id: snapshot.id, ...snapshot.data() })),
+      event
+    );
+
+    nextPlayers.forEach((player) => {
+      transaction.update(playerDocRef(gameId, player.id), { resources: player.resources, score: player.score });
+    });
+
+    const activePlayerId = gameData.playerOrder[0] ?? players[0]?.id ?? null;
+
+    transaction.update(gameRef, {
+      phase: "turns",
+      activePlayerId,
+      turnIndex: 0,
+      eventDeck: remainingDeck,
+      currentEventId: event.id
+    });
+
+    appendLog(transaction, gameId, { message: `Round ${gameData.round} event: ${event.name}.`, type: "system" });
   });
 }
 
@@ -330,24 +385,31 @@ export async function advanceTurnOrRoundTx(gameId: string, uid: string) {
     const currentPlayerSnap = getPlayerByUid(players, uid);
     assert(gameData.activePlayerId === currentPlayerSnap.id, "Only the active player can end their turn.");
 
-    const orderedIds = players.map((snapshot) => snapshot.id);
-    const currentIndex = orderedIds.indexOf(currentPlayerSnap.id);
-    assert(currentIndex >= 0, "Active player order is invalid.");
+    const order = gameData.playerOrder.length ? gameData.playerOrder : players.map((snapshot) => snapshot.id);
+    const currentIndex = gameData.turnIndex;
+    assert(order[currentIndex] === currentPlayerSnap.id, "Turn order is out of sync.");
 
-    const nextPlayerId = orderedIds[currentIndex + 1] ?? null;
-    transaction.update(gameRef, nextPlayerId ? { activePlayerId: nextPlayerId } : { phase: "upkeep", activePlayerId: null });
+    const nextIndex = currentIndex + 1;
+    const wrapped = nextIndex >= order.length;
+
+    transaction.update(
+      gameRef,
+      wrapped
+        ? { phase: "upkeep", activePlayerId: null, turnIndex: 0 }
+        : { activePlayerId: order[nextIndex], turnIndex: nextIndex }
+    );
 
     appendLog(transaction, gameId, {
-      message: nextPlayerId
-        ? `${currentPlayerSnap.data().displayName} ended their turn.`
-        : `Round ${gameData.round} turns complete. Entering upkeep.`,
+      message: wrapped
+        ? `Round ${gameData.round} turns complete. Entering upkeep.`
+        : `${currentPlayerSnap.data().displayName} ended their turn.`,
       playerId: currentPlayerSnap.id,
       type: "action"
     });
   });
 }
 
-export async function resolveRoundUpkeepTx(gameId: string) {
+export async function resolveRoundUpkeepTx(gameId: string, uid: string) {
   const players = await getOrderedPlayers(gameId);
 
   return runTransaction(firestore, async (transaction) => {
@@ -360,22 +422,41 @@ export async function resolveRoundUpkeepTx(gameId: string) {
     assert(gameData.lastPhaseResolvedRound !== gameData.round, "Upkeep already resolved for this round.");
     assert(players.length > 0, "No players found.");
 
-    players.forEach((snapshot) => {
-      transaction.update(playerDocRef(gameId, snapshot.id), {
+    const hostSnap = players.find((snapshot) => snapshot.id === gameData.hostPlayerId);
+    assert(hostSnap, "Host player not found.");
+    assert(hostSnap.data().uid === uid, "Only the host can resolve upkeep.");
+
+    const updatedPlayers = players.map((snapshot) => {
+      const basePlayer = { id: snapshot.id, ...snapshot.data() };
+      const afterDecay = applyPlantDecayAndDeaths(basePlayer);
+      const afterAdjacentBonuses = applyAdjacentPairBonuses(afterDecay);
+      const afterFlowerCollection = collectFlowerTokens(afterAdjacentBonuses);
+
+      return {
+        ...afterFlowerCollection,
         resources: {
-          ...snapshot.data().resources,
-          water: snapshot.data().resources.water + 1
+          ...afterFlowerCollection.resources,
+          water: afterFlowerCollection.resources.water + 1
         }
+      };
+    });
+
+    const nextRound = gameData.round + 1;
+    const isGameOver = nextRound > gameData.roundsTotal;
+
+    updatedPlayers.forEach((player) => {
+      transaction.update(playerDocRef(gameId, player.id), {
+        gardenSlots: player.gardenSlots,
+        resources: player.resources,
+        score: isGameOver ? computePlayerScore(player) : player.score
       });
     });
 
-    const isGameOver = gameData.round >= gameData.roundsTotal;
-    const nextRound = gameData.round + 1;
-
     transaction.update(gameRef, {
-      phase: isGameOver ? "ended" : "active",
+      phase: isGameOver ? "ended" : "event",
       status: isGameOver ? "ended" : gameData.status,
-      activePlayerId: isGameOver ? null : players[0]?.id ?? null,
+      activePlayerId: null,
+      turnIndex: 0,
       round: isGameOver ? gameData.round : nextRound,
       lastPhaseResolvedRound: gameData.round
     });
@@ -383,7 +464,7 @@ export async function resolveRoundUpkeepTx(gameId: string) {
     appendLog(transaction, gameId, {
       message: isGameOver
         ? `Round ${gameData.round} upkeep resolved. Game ended.`
-        : `Round ${gameData.round} upkeep resolved. Round ${nextRound} begins.`,
+        : `Round ${gameData.round} upkeep resolved. Round ${nextRound} event phase begins.`,
       type: "system"
     });
   });
