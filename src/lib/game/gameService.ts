@@ -12,6 +12,7 @@ import {
 } from "firebase/firestore";
 import { firestore } from "@/lib/firestore";
 import { GARDEN_SLOT_DEFAULT, ROUNDS_TOTAL, SETUP_HAND_SIZE, SETUP_STARTING_RESOURCES } from "@/lib/game/constants";
+import { EVENT_CARDS } from "@/lib/game/cards/events";
 import { PLANT_CARD_IDS } from "@/lib/game/cards/plants";
 import { drawSetupHands, shuffleFisherYates } from "@/lib/game/decks";
 import type { GameDoc, PlayerDoc } from "@/lib/game/types";
@@ -45,7 +46,7 @@ export async function createGame(hostDisplayName: string, uid?: string | null) {
     activePlayerId: null,
     playerOrder: [],
     turnIndex: 0,
-    eventDeck: [],
+    eventDeck: shuffleFisherYates(EVENT_CARDS),
     plantDeck: [],
     currentEventId: null,
     lastPhaseResolvedRound: null,
@@ -209,6 +210,7 @@ export async function startGameFromLobby(gameId: string, playerId: string, uid?:
     activePlayerId: null,
     playerOrder: playerIds,
     turnIndex: 0,
+    eventDeck: shuffleFisherYates(EVENT_CARDS),
     plantDeck: remainingDeck,
     currentEventId: null,
     lastPhaseResolvedRound: null,
