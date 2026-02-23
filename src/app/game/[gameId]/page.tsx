@@ -8,8 +8,11 @@ import { GardenTableau } from "@/components/game/GardenTableau";
 import { HandPanel } from "@/components/game/HandPanel";
 import { GameLog } from "@/components/game/GameLog";
 import { leaveGame, startGameFromLobby } from "@/lib/game/gameService";
-import { useGame, usePlayers } from "@/lib/game/hooks";
 import { useAuthUser } from "@/hooks/useAuthUser";
+import { useGame } from "@/hooks/useGame";
+import { useGameLog } from "@/hooks/useGameLog";
+import { useMe } from "@/hooks/useMe";
+import { usePlayers } from "@/hooks/usePlayers";
 
 interface GamePageProps {
   params: { gameId: string };
@@ -18,21 +21,40 @@ interface GamePageProps {
 export default function GamePage({ params }: GamePageProps) {
   const router = useRouter();
   const { user } = useAuthUser();
-  const { game, loading: gameLoading } = useGame(params.gameId);
-  const { players, loading: playersLoading } = usePlayers(params.gameId);
-  const [currentPlayerId, setCurrentPlayerId] = useState<string | null>(null);
+  const { data: game, loading: gameLoading, error: gameError } = useGame(params.gameId);
+  const { data: players, loading: playersLoading, error: playersError } = usePlayers(params.gameId);
+  const { data: me, loading: meLoading, error: meError } = useMe(params.gameId, user?.uid);
+  const { data: logEntries, loading: logLoading, error: logError } = useGameLog(params.gameId);
   const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    setCurrentPlayerId(window.localStorage.getItem(`blossom:${params.gameId}:playerId`));
-  }, [params.gameId]);
+  const loading = gameLoading || playersLoading || meLoading;
 
   const currentPlayer = useMemo(
-    () => players.find((player) => player.id === currentPlayerId) ?? null,
-    [players, currentPlayerId]
+    () => players.find((player) => player.id === me?.id) ?? null,
+    [players, me?.id]
   );
 
-  if (gameLoading || playersLoading) {
+  useEffect(() => {
+    if (gameError) {
+      setError(gameError.message);
+      return;
+    }
+
+    if (playersError) {
+      setError(playersError.message);
+      return;
+    }
+
+    if (meError) {
+      setError(meError.message);
+      return;
+    }
+
+    if (logError) {
+      setError(logError.message);
+    }
+  }, [gameError, playersError, meError, logError]);
+
+  if (loading) {
     return <main>Loading game...</main>;
   }
 
@@ -46,13 +68,13 @@ export default function GamePage({ params }: GamePageProps) {
       return;
     }
 
-    if (!currentPlayerId) {
+    if (!me?.id) {
       setError("Missing local player ID. Rejoin from home.");
       return;
     }
 
     try {
-      await startGameFromLobby(params.gameId, currentPlayerId, user.uid);
+      await startGameFromLobby(params.gameId, me.id, user.uid);
     } catch (startError) {
       setError(startError instanceof Error ? startError.message : "Could not start game.");
     }
@@ -64,13 +86,13 @@ export default function GamePage({ params }: GamePageProps) {
       return;
     }
 
-    if (!currentPlayerId) {
+    if (!me?.id) {
       router.push("/");
       return;
     }
 
     try {
-      await leaveGame(params.gameId, currentPlayerId, user.uid);
+      await leaveGame(params.gameId, me.id, user.uid);
       window.localStorage.removeItem(`blossom:${params.gameId}:playerId`);
       router.push("/");
     } catch (leaveError) {
@@ -78,14 +100,21 @@ export default function GamePage({ params }: GamePageProps) {
     }
   }
 
+  const isMyTurn = Boolean(me?.id && game.activePlayerId === me.id);
+  const disableActionControls = loading || (game.phase === "turns" && !isMyTurn);
+
   return (
     <main>
       <GameHeader game={game} playerCount={players.length} />
 
       <div style={{ display: "flex", gap: 8 }}>
-        <button onClick={handleLeaveGame}>Leave Game</button>
-        {game.phase === "lobby" && currentPlayerId === game.hostPlayerId ? (
-          <button onClick={handleStartGame}>Start Game</button>
+        <button onClick={handleLeaveGame} disabled={loading}>
+          Leave Game
+        </button>
+        {game.phase === "lobby" && me?.id === game.hostPlayerId ? (
+          <button onClick={handleStartGame} disabled={disableActionControls}>
+            Start Game
+          </button>
         ) : null}
       </div>
 
@@ -123,7 +152,7 @@ export default function GamePage({ params }: GamePageProps) {
         </>
       ) : null}
 
-      <GameLog entries={game.log ?? []} />
+      {logLoading ? <p>Loading game log...</p> : <GameLog entries={logEntries.map((entry) => entry.message)} />}
     </main>
   );
 }
