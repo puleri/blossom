@@ -55,6 +55,7 @@ export async function createGame(hostDisplayName: string, uid?: string | null) {
     hostPlayerId: playerRef.id,
     activePlayerId: null,
     eventDeck: [],
+    lastPhaseResolvedRound: null,
     log: createEmptyGameLog(hostDisplayName)
   };
 
@@ -198,6 +199,7 @@ export async function startGameFromLobby(gameId: string, playerId: string, uid?:
     phase: "setup",
     round: 1,
     activePlayerId: firstPlayerId,
+    lastPhaseResolvedRound: null,
     log: [...(gameData.log ?? []), "Game started. Setup phase begins."]
   });
 }

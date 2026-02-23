@@ -1,6 +1,6 @@
 export type GameStatus = "lobby" | "in_progress" | "ended";
 
-export type Phase = "lobby" | "setup" | "active" | "ended";
+export type Phase = "lobby" | "setup" | "turns" | "upkeep" | "ended";
 
 export type GardenSlotState = "empty" | "seedling" | "grown" | "withered";
 
@@ -30,6 +30,7 @@ export interface PlayerDoc {
   score: number;
   hand: PlantCard[];
   gardenSlots: GardenSlotState[];
+  setupKept?: boolean;
 }
 
 export interface GameDoc {
@@ -43,5 +44,13 @@ export interface GameDoc {
   hostPlayerId: string;
   activePlayerId: string | null;
   eventDeck: EventCard[];
-  log: string[];
+  lastPhaseResolvedRound: number | null;
+  log?: string[];
+}
+
+export interface GameLogEntryDoc {
+  message: string;
+  playerId?: string | null;
+  createdAt?: unknown;
+  type: "system" | "action";
 }

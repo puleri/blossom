@@ -107,7 +107,7 @@ export default function GamePage({ params }: GamePageProps) {
         </>
       ) : null}
 
-      {game.phase === "active" ? (
+      {game.phase === "turns" ? (
         <>
           <p>Active gameplay is in progress.</p>
           <PlayerList players={players} activePlayerId={game.activePlayerId} />
