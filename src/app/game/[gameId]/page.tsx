@@ -9,6 +9,7 @@ import { HandPanel } from "@/components/game/HandPanel";
 import { GameLog } from "@/components/game/GameLog";
 import { leaveGame, startGameFromLobby } from "@/lib/game/gameService";
 import { useGame, usePlayers } from "@/lib/game/hooks";
+import { useAuthUser } from "@/hooks/useAuthUser";
 
 interface GamePageProps {
   params: { gameId: string };
@@ -16,6 +17,7 @@ interface GamePageProps {
 
 export default function GamePage({ params }: GamePageProps) {
   const router = useRouter();
+  const { user } = useAuthUser();
   const { game, loading: gameLoading } = useGame(params.gameId);
   const { players, loading: playersLoading } = usePlayers(params.gameId);
   const [currentPlayerId, setCurrentPlayerId] = useState<string | null>(null);
@@ -39,27 +41,41 @@ export default function GamePage({ params }: GamePageProps) {
   }
 
   async function handleStartGame() {
+    if (!user?.uid) {
+      setError("Cannot start game without an authenticated user id (uid).");
+      return;
+    }
+
     if (!currentPlayerId) {
       setError("Missing local player ID. Rejoin from home.");
       return;
     }
 
     try {
-      await startGameFromLobby(params.gameId, currentPlayerId);
+      await startGameFromLobby(params.gameId, currentPlayerId, user.uid);
     } catch (startError) {
       setError(startError instanceof Error ? startError.message : "Could not start game.");
     }
   }
 
   async function handleLeaveGame() {
+    if (!user?.uid) {
+      setError("Cannot leave game without an authenticated user id (uid).");
+      return;
+    }
+
     if (!currentPlayerId) {
       router.push("/");
       return;
     }
 
-    await leaveGame(params.gameId, currentPlayerId);
-    window.localStorage.removeItem(`blossom:${params.gameId}:playerId`);
-    router.push("/");
+    try {
+      await leaveGame(params.gameId, currentPlayerId, user.uid);
+      window.localStorage.removeItem(`blossom:${params.gameId}:playerId`);
+      router.push("/");
+    } catch (leaveError) {
+      setError(leaveError instanceof Error ? leaveError.message : "Could not leave game.");
+    }
   }
 
   return (

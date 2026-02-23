@@ -1,4 +1,5 @@
 import "./globals.css";
+import { AuthBootstrap } from "@/components/AuthBootstrap";
 
 export const metadata = {
   title: "Blossom",
@@ -12,7 +13,10 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body>
+        <AuthBootstrap />
+        {children}
+      </body>
     </html>
   );
 }

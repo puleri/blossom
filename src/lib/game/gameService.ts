@@ -17,6 +17,14 @@ import {
 } from "@/lib/game/constants";
 import type { GameDoc, PlayerDoc } from "@/lib/game/types";
 
+function requireUid(uid?: string | null) {
+  if (!uid) {
+    throw new Error("Missing authenticated user (uid). Please refresh and try again.");
+  }
+
+  return uid;
+}
+
 function createEmptyGameLog(hostName: string) {
   return [`${hostName} created the game.`];
 }
@@ -31,7 +39,9 @@ function createStartingHand() {
   }));
 }
 
-export async function createGame(hostDisplayName: string) {
+export async function createGame(hostDisplayName: string, uid?: string | null) {
+  const requiredUid = requireUid(uid);
+
   const gameRef = doc(collection(firestore, "games"));
   const playerRef = doc(collection(gameRef, "players"));
 
@@ -50,6 +60,7 @@ export async function createGame(hostDisplayName: string) {
 
   const hostDoc: Omit<PlayerDoc, "id"> = {
     displayName: hostDisplayName,
+    uid: requiredUid,
     isHost: true,
     joinedAt: serverTimestamp(),
     resources: SETUP_STARTING_RESOURCES,
@@ -64,7 +75,9 @@ export async function createGame(hostDisplayName: string) {
   return { gameId: gameRef.id, playerId: playerRef.id };
 }
 
-export async function joinGame(gameId: string, displayName: string) {
+export async function joinGame(gameId: string, displayName: string, uid?: string | null) {
+  const requiredUid = requireUid(uid);
+
   const gameRef = doc(firestore, "games", gameId);
   const gameSnapshot = await getDoc(gameRef);
 
@@ -80,6 +93,7 @@ export async function joinGame(gameId: string, displayName: string) {
   const playerRef = doc(collection(gameRef, "players"));
   const playerDoc: Omit<PlayerDoc, "id"> = {
     displayName,
+    uid: requiredUid,
     isHost: false,
     joinedAt: serverTimestamp(),
     resources: SETUP_STARTING_RESOURCES,
@@ -96,13 +110,22 @@ export async function joinGame(gameId: string, displayName: string) {
   return { gameId, playerId: playerRef.id };
 }
 
-export async function leaveGame(gameId: string, playerId: string) {
+export async function leaveGame(gameId: string, playerId: string, uid?: string | null) {
+  const requiredUid = requireUid(uid);
+
   const gameRef = doc(firestore, "games", gameId);
   const playerRef = doc(gameRef, "players", playerId);
 
   const [gameSnap, playerSnap] = await Promise.all([getDoc(gameRef), getDoc(playerRef)]);
   if (!gameSnap.exists()) {
     return;
+  }
+
+  if (playerSnap.exists()) {
+    const playerData = playerSnap.data() as PlayerDoc;
+    if (playerData.uid !== requiredUid) {
+      throw new Error("You can only leave as the authenticated player.");
+    }
   }
 
   const gameData = gameSnap.data() as GameDoc;
@@ -133,12 +156,24 @@ export async function leaveGame(gameId: string, playerId: string) {
   });
 }
 
-export async function startGameFromLobby(gameId: string, playerId: string) {
+export async function startGameFromLobby(gameId: string, playerId: string, uid?: string | null) {
+  const requiredUid = requireUid(uid);
+
   const gameRef = doc(firestore, "games", gameId);
   const gameSnap = await getDoc(gameRef);
 
   if (!gameSnap.exists()) {
     throw new Error("Game not found.");
+  }
+
+  const playerSnap = await getDoc(doc(gameRef, "players", playerId));
+  if (!playerSnap.exists()) {
+    throw new Error("Player not found.");
+  }
+
+  const playerData = playerSnap.data() as PlayerDoc;
+  if (playerData.uid !== requiredUid) {
+    throw new Error("Authenticated user does not match this player.");
   }
 
   const gameData = gameSnap.data() as GameDoc;
