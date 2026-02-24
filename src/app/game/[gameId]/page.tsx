@@ -10,10 +10,11 @@ import { GameLog } from "@/components/game/GameLog";
 import { leaveGame, startGameFromLobby } from "@/lib/game/gameService";
 import {
   drawPlantCardTx,
+  goToWellTx,
+  passTurnTx,
   resolveRoundUpkeepTx,
   sowPlantTx,
-  submitSetupKeepTx,
-  waterPlantTx
+  submitSetupKeepTx
 } from "@/lib/game/actions";
 import { EVENT_CARDS } from "@/lib/game/cards/events";
 import { PLANT_CARDS } from "@/lib/game/cards/plants";
@@ -272,7 +273,7 @@ export default function GamePage({ params }: GamePageProps) {
 
       {game.phase === "turns" ? (
         <>
-          <p>Turns phase is in progress. Plants begin with 1 water unless a card ability says otherwise, and you may add water to a plant at any point during your turn.</p>
+          <p>Turns phase is in progress. A sown plant stays a seed until it is watered, and seeds cannot wither.</p>
           {currentEvent ? (
             <p>
               Round event in play: <strong>{currentEvent.name}</strong> — {currentEvent.description} (resolves at round end)
@@ -284,7 +285,7 @@ export default function GamePage({ params }: GamePageProps) {
 
           {isMyTurn && currentPlayer ? (
             <section>
-              <h3>Your turn action</h3>
+              <h3>Your turn actions</h3>
               <label>
                 Plant from hand
                 <select value={selectedPlantId} onChange={(event) => setSelectedPlantId(event.target.value)}>
@@ -323,14 +324,14 @@ export default function GamePage({ params }: GamePageProps) {
 
                 <button
                   onClick={() =>
-                    runAction("water", async () => {
+                    runAction("well", async () => {
                       if (!user?.uid) throw new Error("Missing authenticated user id.");
-                      await waterPlantTx(gameId, user.uid, selectedSlot);
+                      await goToWellTx(gameId, user.uid);
                     })
                   }
                   disabled={Boolean(busyAction)}
                 >
-                  {busyAction === "water" ? "Watering..." : "Add water to selected plant"}
+                  {busyAction === "well" ? "Visiting well..." : "Go to the well (water all seeds + gain 2 water)"}
                 </button>
 
                 <button
@@ -343,6 +344,18 @@ export default function GamePage({ params }: GamePageProps) {
                   disabled={Boolean(busyAction)}
                 >
                   {busyAction === "draw-plant" ? "Drawing..." : "Draw a plant card"}
+                </button>
+
+                <button
+                  onClick={() =>
+                    runAction("pass", async () => {
+                      if (!user?.uid) throw new Error("Missing authenticated user id.");
+                      await passTurnTx(gameId, user.uid);
+                    })
+                  }
+                  disabled={Boolean(busyAction)}
+                >
+                  {busyAction === "pass" ? "Passing..." : "Pass turn"}
                 </button>
               </div>
             </section>

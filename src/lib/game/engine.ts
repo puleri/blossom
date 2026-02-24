@@ -30,7 +30,6 @@ export function applyEventToPlayers(players: PlayerDoc[], event: EventCard): Pla
 export function applyPlantDecayAndDeaths(player: PlayerDoc): PlayerDoc {
   const nextSlots = player.gardenSlots.map((slot) => {
     if (slot === "grown") return "seedling";
-    if (slot === "seedling") return "withered";
     return slot;
   });
 
