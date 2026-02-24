@@ -17,7 +17,7 @@ import {
   submitSetupKeepTx
 } from "@/lib/game/actions";
 import { EVENT_CARDS } from "@/lib/game/cards/events";
-import { PLANT_CARDS } from "@/lib/game/cards/plants";
+import { getPlantCardById, getPlantSummaryLabel } from "@/lib/game/cards/details";
 import { useAuthUser } from "@/hooks/useAuthUser";
 import { useGame } from "@/hooks/useGame";
 import { useGameLog } from "@/hooks/useGameLog";
@@ -178,7 +178,7 @@ export default function GamePage({ params }: GamePageProps) {
   const remainingTurnActions = game.phase === "turns" ? Math.max(0, game.remainingActions ?? 0) : 0;
   const actionsExhausted = game.phase === "turns" && isMyTurn && remainingTurnActions <= 0;
 
-  const currentPlant = PLANT_CARDS.find((plant) => plant.id === selectedPlantId) ?? null;
+  const currentPlant = getPlantCardById(selectedPlantId);
   const currentEvent = EVENT_CARDS.find((event) => event.id === game.currentEventId) ?? null;
   const isHost = Boolean(me?.id && me.id === game.hostPlayerId);
 
@@ -226,7 +226,7 @@ export default function GamePage({ params }: GamePageProps) {
                         onChange={() => toggleSetupPlant(cardId)}
                         disabled={Boolean(busyAction)}
                       />
-                      {cardId}
+                      {getPlantSummaryLabel(cardId)}
                     </label>
                   </li>
                 ))}
@@ -294,7 +294,7 @@ export default function GamePage({ params }: GamePageProps) {
                 <select value={selectedPlantId} onChange={(event) => setSelectedPlantId(event.target.value)}>
                   {currentPlayer.hand.map((plantId) => (
                     <option key={plantId} value={plantId}>
-                      {plantId}
+                      {getPlantSummaryLabel(plantId)}
                     </option>
                   ))}
                 </select>

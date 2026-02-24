@@ -42,6 +42,7 @@ export interface PlayerDoc {
   score: number;
   hand: string[];
   gardenSlots: GardenSlotState[];
+  gardenPlantIds?: Array<string | null>;
   keptFromMulligan: boolean;
 }
 

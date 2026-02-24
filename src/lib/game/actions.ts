@@ -11,8 +11,9 @@ import {
 } from "firebase/firestore";
 import { firestore } from "@/lib/firestore";
 import { ACTIONS_PER_TURN, GARDEN_SLOT_DEFAULT, ROUNDS_TOTAL, SETUP_HAND_SIZE, SETUP_STARTING_RESOURCES } from "@/lib/game/constants";
+import { getPlantCardById, getPlantDisplayName } from "@/lib/game/cards/details";
 import { EVENT_CARDS } from "@/lib/game/cards/events";
-import { PLANT_CARDS, PLANT_CARD_IDS } from "@/lib/game/cards/plants";
+import { PLANT_CARD_IDS } from "@/lib/game/cards/plants";
 import { drawFromDeck, drawSetupHands, revealNextEvent, shuffleFisherYates } from "@/lib/game/decks";
 import {
   applyAdjacentPairBonuses,
@@ -48,8 +49,8 @@ async function getOrderedPlayers(gameId: string) {
   return snap.docs;
 }
 
-function getPlantById(plantId: string) {
-  return PLANT_CARDS.find((card) => card.id === plantId);
+function getGardenPlantIds(player: Omit<PlayerDoc, "id">) {
+  return player.gardenPlantIds ?? player.gardenSlots.map(() => null);
 }
 
 function getRemainingActions(game: Omit<GameDoc, "id">) {
@@ -109,6 +110,7 @@ export async function createGameTx(hostDisplayName: string, uid: string) {
       score: 0,
       hand: [],
       gardenSlots: Array.from({ length: GARDEN_SLOT_DEFAULT }, () => "empty"),
+      gardenPlantIds: Array.from({ length: GARDEN_SLOT_DEFAULT }, () => null),
       keptFromMulligan: false
     });
 
@@ -138,6 +140,7 @@ export async function joinGameTx(gameId: string, displayName: string, uid: strin
       score: 0,
       hand: [],
       gardenSlots: Array.from({ length: GARDEN_SLOT_DEFAULT }, () => "empty"),
+      gardenPlantIds: Array.from({ length: GARDEN_SLOT_DEFAULT }, () => null),
       keptFromMulligan: false
     });
 
@@ -323,16 +326,19 @@ export async function sowPlantTx(gameId: string, uid: string, plantId: string, s
 
     assert(playerData.hand.includes(plantId), "Plant not found in hand.");
 
-    const plant = getPlantById(plantId);
+    const plant = getPlantCardById(plantId);
     assert(plant, "Plant card definition not found.");
     assert(playerData.resources.seeds >= plant.seedCost, "Not enough seeds to sow this plant.");
 
     const nextSlots = [...playerData.gardenSlots];
+    const nextPlantIds = getGardenPlantIds(playerData);
     nextSlots[slotIndex] = "seedling";
+    nextPlantIds[slotIndex] = plant.id;
 
     transaction.update(playerDocRef(gameId, playerSnap.id), {
       hand: playerData.hand.filter((cardId) => cardId !== plantId),
       gardenSlots: nextSlots,
+      gardenPlantIds: nextPlantIds,
       resources: {
         ...playerData.resources,
         seeds: playerData.resources.seeds - plant.seedCost
@@ -452,7 +458,7 @@ export async function drawPlantCardTx(gameId: string, uid: string) {
     }
 
     appendLog(transaction, gameId, {
-      message: `${playerData.displayName} drew a plant card (${drawnCardId}).`,
+      message: `${playerData.displayName} drew a plant card (${getPlantDisplayName(drawnCardId)}).`,
       playerId: playerSnap.id,
       type: "action"
     });
@@ -479,13 +485,21 @@ export async function activatePlantAbilityTx(gameId: string, uid: string, slotIn
     const playerData = playerSnap.data();
     assert(slotIndex >= 0 && slotIndex < playerData.gardenSlots.length, "Invalid garden slot.");
     assert(playerData.gardenSlots[slotIndex] === "grown", "Only grown plants can activate abilities.");
-    assert(playerData.resources.water >= 1, "Not enough water to activate ability.");
+    const plantId = getGardenPlantIds(playerData)[slotIndex];
+    assert(plantId, "No plant found in selected slot.");
+    const plant = getPlantCardById(plantId);
+    assert(plant, "Plant card definition not found.");
+
+    const abilityWaterCost = 1;
+    const flowerGain = Math.max(1, Math.floor(plant.points / 4));
+
+    assert(playerData.resources.water >= abilityWaterCost, "Not enough water to activate ability.");
 
     transaction.update(playerDocRef(gameId, playerSnap.id), {
       resources: {
         ...playerData.resources,
-        water: playerData.resources.water - 1,
-        flowers: playerData.resources.flowers + 1
+        water: playerData.resources.water - abilityWaterCost,
+        flowers: playerData.resources.flowers + flowerGain
       }
     });
 
@@ -505,7 +519,7 @@ export async function activatePlantAbilityTx(gameId: string, uid: string, slotIn
     }
 
     appendLog(transaction, gameId, {
-      message: `${playerData.displayName} activated a plant ability at slot ${slotIndex + 1}.`,
+      message: `${playerData.displayName} activated ${plant.name}'s ability at slot ${slotIndex + 1} (+${flowerGain} flowers).`,
       playerId: playerSnap.id,
       type: "action"
     });
@@ -580,6 +594,7 @@ export async function resolveRoundUpkeepTx(gameId: string, uid: string) {
     updatedPlayers.forEach((player) => {
       transaction.update(playerDocRef(gameId, player.id), {
         gardenSlots: player.gardenSlots,
+        gardenPlantIds: player.gardenPlantIds ?? player.gardenSlots.map(() => null),
         resources: player.resources,
         score: isGameOver ? computePlayerScore(player) : player.score
       });
