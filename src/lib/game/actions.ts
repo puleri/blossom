@@ -52,15 +52,6 @@ function getPlantById(plantId: string) {
   return PLANT_CARDS.find((card) => card.id === plantId);
 }
 
-function getNextTurnState(order: string[], currentIndex: number) {
-  const nextIndex = currentIndex + 1;
-  const wrapped = nextIndex >= order.length;
-
-  return wrapped
-    ? { phase: "upkeep" as const, activePlayerId: null, turnIndex: 0 }
-    : { phase: "turns" as const, activePlayerId: order[nextIndex], turnIndex: nextIndex };
-}
-
 export async function createGameTx(hostDisplayName: string, uid: string) {
   assert(uid, "Missing authenticated user (uid). Please refresh and try again.");
   const gameRef = doc(collection(firestore, "games"));
@@ -310,10 +301,6 @@ export async function sowPlantTx(gameId: string, uid: string, plantId: string, s
     const nextSlots = [...playerData.gardenSlots];
     nextSlots[slotIndex] = "seedling";
 
-    const order = gameData.playerOrder.length ? gameData.playerOrder : players.map((snapshot) => snapshot.id);
-    const currentIndex = gameData.turnIndex;
-    assert(order[currentIndex] === playerSnap.id, "Turn order is out of sync.");
-
     transaction.update(playerDocRef(gameId, playerSnap.id), {
       hand: playerData.hand.filter((cardId) => cardId !== plantId),
       gardenSlots: nextSlots,
@@ -328,12 +315,10 @@ export async function sowPlantTx(gameId: string, uid: string, plantId: string, s
       playerId: playerSnap.id,
       type: "action"
     });
-
-    transaction.update(gameDocRef(gameId), getNextTurnState(order, currentIndex));
   });
 }
 
-export async function waterPlantTx(gameId: string, uid: string, slotIndex: number) {
+export async function goToWellTx(gameId: string, uid: string) {
   const players = await getOrderedPlayers(gameId);
 
   return runTransaction(firestore, async (transaction) => {
@@ -346,27 +331,21 @@ export async function waterPlantTx(gameId: string, uid: string, slotIndex: numbe
     assert(gameData.activePlayerId === playerSnap.id, "Only the active player can perform turn actions.");
 
     const playerData = playerSnap.data();
-    assert(slotIndex >= 0 && slotIndex < playerData.gardenSlots.length, "Invalid garden slot.");
-    assert(playerData.gardenSlots[slotIndex] === "seedling", "Only seedlings can be watered.");
-    assert(playerData.resources.water >= 1, "Not enough water to water a plant.");
-
-    const nextSlots = [...playerData.gardenSlots];
-    nextSlots[slotIndex] = "grown";
-
-    const order = gameData.playerOrder.length ? gameData.playerOrder : players.map((snapshot) => snapshot.id);
-    const currentIndex = gameData.turnIndex;
-    assert(order[currentIndex] === playerSnap.id, "Turn order is out of sync.");
+    const nextSlots = playerData.gardenSlots.map((slot) => (slot === "seedling" ? "grown" : slot));
 
     transaction.update(playerDocRef(gameId, playerSnap.id), {
       gardenSlots: nextSlots,
       resources: {
         ...playerData.resources,
-        water: playerData.resources.water - 1
-      },
-      score: playerData.score + 1
+        water: playerData.resources.water + 2
+      }
     });
 
-    appendLog(transaction, gameId, { message: `${playerData.displayName} visited the well and watered slot ${slotIndex + 1}.`, playerId: playerSnap.id, type: "action" });
+    appendLog(transaction, gameId, {
+      message: `${playerData.displayName} went to the well, watered all seeds, and gained 2 water.`,
+      playerId: playerSnap.id,
+      type: "action"
+    });
   });
 }
 
@@ -383,10 +362,6 @@ export async function drawPlantCardTx(gameId: string, uid: string) {
     const playerSnap = getPlayerByUid(players, uid);
     assert(gameData.activePlayerId === playerSnap.id, "Only the active player can perform turn actions.");
 
-    const order = gameData.playerOrder.length ? gameData.playerOrder : players.map((snapshot) => snapshot.id);
-    const currentIndex = gameData.turnIndex;
-    assert(order[currentIndex] === playerSnap.id, "Turn order is out of sync.");
-
     const draw = drawFromDeck(gameData.plantDeck ?? [], 1);
     assert(draw.drawn.length === 1, "Plant deck is empty.");
 
@@ -398,8 +373,7 @@ export async function drawPlantCardTx(gameId: string, uid: string) {
     });
 
     transaction.update(gameRef, {
-      plantDeck: draw.remainingDeck,
-      ...getNextTurnState(order, currentIndex)
+      plantDeck: draw.remainingDeck
     });
 
     appendLog(transaction, gameId, {
@@ -408,6 +382,10 @@ export async function drawPlantCardTx(gameId: string, uid: string) {
       type: "action"
     });
   });
+}
+
+export async function passTurnTx(gameId: string, uid: string) {
+  return advanceTurnOrRoundTx(gameId, uid);
 }
 
 export async function activatePlantAbilityTx(gameId: string, uid: string, slotIndex: number) {
