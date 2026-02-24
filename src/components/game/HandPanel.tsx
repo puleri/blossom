@@ -1,4 +1,4 @@
-import { getPlantSummaryLabel } from "@/lib/game/cards/details";
+import { getPlantCardById } from "@/lib/game/cards/details";
 
 interface HandPanelProps {
   hand: string[];
@@ -11,11 +11,36 @@ export function HandPanel({ hand }: HandPanelProps) {
       {hand.length === 0 ? (
         <p>No cards in hand.</p>
       ) : (
-        <ul>
-          {hand.map((cardId) => (
-            <li key={cardId}>{getPlantSummaryLabel(cardId)}</li>
-          ))}
-        </ul>
+        <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 4 }}>
+          {hand.map((cardId) => {
+            const card = getPlantCardById(cardId);
+
+            return (
+              <article
+                key={cardId}
+                style={{
+                  border: "1px solid #ccc",
+                  borderRadius: 6,
+                  padding: 8,
+                  minWidth: 180,
+                  backgroundColor: "#fff"
+                }}
+              >
+                <strong>{card?.name ?? cardId}</strong>
+                {card ? (
+                  <>
+                    <p style={{ margin: "6px 0", fontSize: 12 }}>
+                      Seed {card.seedCost} · Pts {card.points} · Water {card.waterCapacity}
+                    </p>
+                    <p style={{ margin: "6px 0", fontSize: 12 }}>
+                      Decay {card.decayPerRound} · Upkeep {card.requiresUpkeep ? "Yes" : "No"}
+                    </p>
+                  </>
+                ) : null}
+              </article>
+            );
+          })}
+        </div>
       )}
     </section>
   );
