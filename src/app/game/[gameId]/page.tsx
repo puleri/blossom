@@ -272,7 +272,7 @@ export default function GamePage({ params }: GamePageProps) {
 
       {game.phase === "turns" ? (
         <>
-          <p>Turns phase is in progress.</p>
+          <p>Turns phase is in progress. Plants begin with 1 water unless a card ability says otherwise, and you may add water to a plant at any point during your turn.</p>
           {currentEvent ? (
             <p>
               Round event in play: <strong>{currentEvent.name}</strong> — {currentEvent.description} (resolves at round end)
@@ -330,7 +330,7 @@ export default function GamePage({ params }: GamePageProps) {
                   }
                   disabled={Boolean(busyAction)}
                 >
-                  {busyAction === "water" ? "Watering..." : "Go to the water well"}
+                  {busyAction === "water" ? "Watering..." : "Add water to selected plant"}
                 </button>
 
                 <button
