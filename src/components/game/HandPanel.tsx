@@ -1,4 +1,4 @@
-import { getPlantCardById } from "@/lib/game/cards/details";
+import { getPlantAbilityDescriptions, getPlantCardById } from "@/lib/game/cards/details";
 
 interface HandPanelProps {
   hand: string[];
@@ -23,7 +23,8 @@ export function HandPanel({ hand }: HandPanelProps) {
                   borderRadius: 6,
                   padding: 8,
                   minWidth: 180,
-                  backgroundColor: "#fff"
+                  backgroundColor: "#fff",
+                  color: "#1f2937"
                 }}
               >
                 <strong>{card?.name ?? cardId}</strong>
@@ -34,6 +35,9 @@ export function HandPanel({ hand }: HandPanelProps) {
                     </p>
                     <p style={{ margin: "6px 0", fontSize: 12 }}>
                       Decay {card.decayPerRound} · Upkeep {card.requiresUpkeep ? "Yes" : "No"}
+                    </p>
+                    <p style={{ margin: "6px 0", fontSize: 12 }}>
+                      Ability: {getPlantAbilityDescriptions(card.abilities).join(" · ")}
                     </p>
                   </>
                 ) : null}
