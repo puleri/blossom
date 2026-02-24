@@ -64,7 +64,7 @@ These values come from **Project Settings → Your apps → Firebase SDK snippet
 2. **Join by ID**: other players enter the game ID and join from the home page.
 3. **Host starts game**: once at least 2 players are present, host clicks Start Game.
 4. **Setup keep/discard**: each player keeps desired setup plants and discards one resource per kept plant.
-5. **Take turns**: rounds proceed through event resolution, then turn actions in player order.
+5. **Take turns**: rounds proceed through event resolution, then turn actions in player order. Plants begin with 1 water unless card text says otherwise, and players may add water to their plants at any point during their own turn.
 6. **Endgame**: after final upkeep, game status transitions to ended and final scoring is applied.
 
 ## MVP simplifications and known edge cases

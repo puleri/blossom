@@ -367,8 +367,6 @@ export async function waterPlantTx(gameId: string, uid: string, slotIndex: numbe
     });
 
     appendLog(transaction, gameId, { message: `${playerData.displayName} visited the well and watered slot ${slotIndex + 1}.`, playerId: playerSnap.id, type: "action" });
-
-    transaction.update(gameDocRef(gameId), getNextTurnState(order, currentIndex));
   });
 }
 
