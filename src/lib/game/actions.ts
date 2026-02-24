@@ -23,7 +23,7 @@ import {
   computePlayerScore
 } from "@/lib/game/engine";
 import { gameDocRef, gameLogColRef, playerDocRef, playersColRef } from "@/lib/game/refs";
-import type { GameDoc, GameLogEntryDoc, PlayerDoc, ResourceKey } from "@/lib/game/types";
+import type { GameDoc, GameLogEntryDoc, GardenSlot, GardenSlotState, PlayerDoc, ResourceKey } from "@/lib/game/types";
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message);
@@ -49,8 +49,14 @@ async function getOrderedPlayers(gameId: string) {
   return snap.docs;
 }
 
-function getGardenPlantIds(player: Omit<PlayerDoc, "id">) {
-  return player.gardenPlantIds ?? player.gardenSlots.map(() => null);
+function normalizeGardenSlots(player: Omit<PlayerDoc, "id">): GardenSlot[] {
+  return player.gardenSlots.map((slot, index) => {
+    if (typeof slot === "string") {
+      return { state: slot as GardenSlotState, plantId: player.gardenPlantIds?.[index] ?? null };
+    }
+
+    return { state: slot.state, plantId: slot.plantId ?? null };
+  });
 }
 
 function getRemainingActions(game: Omit<GameDoc, "id">) {
@@ -109,8 +115,7 @@ export async function createGameTx(hostDisplayName: string, uid: string) {
       resources: { ...SETUP_STARTING_RESOURCES },
       score: 0,
       hand: [],
-      gardenSlots: Array.from({ length: GARDEN_SLOT_DEFAULT }, () => "empty"),
-      gardenPlantIds: Array.from({ length: GARDEN_SLOT_DEFAULT }, () => null),
+      gardenSlots: Array.from({ length: GARDEN_SLOT_DEFAULT }, () => ({ state: "empty", plantId: null })),
       keptFromMulligan: false
     });
 
@@ -139,8 +144,7 @@ export async function joinGameTx(gameId: string, displayName: string, uid: strin
       resources: { ...SETUP_STARTING_RESOURCES },
       score: 0,
       hand: [],
-      gardenSlots: Array.from({ length: GARDEN_SLOT_DEFAULT }, () => "empty"),
-      gardenPlantIds: Array.from({ length: GARDEN_SLOT_DEFAULT }, () => null),
+      gardenSlots: Array.from({ length: GARDEN_SLOT_DEFAULT }, () => ({ state: "empty", plantId: null })),
       keptFromMulligan: false
     });
 
@@ -322,7 +326,8 @@ export async function sowPlantTx(gameId: string, uid: string, plantId: string, s
 
     const playerData = playerSnap.data();
     assert(slotIndex >= 0 && slotIndex < playerData.gardenSlots.length, "Invalid garden slot.");
-    assert(playerData.gardenSlots[slotIndex] === "empty", "Selected garden slot is not empty.");
+    const gardenSlots = normalizeGardenSlots(playerData);
+    assert(gardenSlots[slotIndex].state === "empty", "Selected garden slot is not empty.");
 
     assert(playerData.hand.includes(plantId), "Plant not found in hand.");
 
@@ -330,15 +335,12 @@ export async function sowPlantTx(gameId: string, uid: string, plantId: string, s
     assert(plant, "Plant card definition not found.");
     assert(playerData.resources.seeds >= plant.seedCost, "Not enough seeds to sow this plant.");
 
-    const nextSlots = [...playerData.gardenSlots];
-    const nextPlantIds = getGardenPlantIds(playerData);
-    nextSlots[slotIndex] = "seedling";
-    nextPlantIds[slotIndex] = plant.id;
+    const nextSlots = normalizeGardenSlots(playerData);
+    nextSlots[slotIndex] = { state: "seedling", plantId: plant.id };
 
     transaction.update(playerDocRef(gameId, playerSnap.id), {
       hand: playerData.hand.filter((cardId) => cardId !== plantId),
       gardenSlots: nextSlots,
-      gardenPlantIds: nextPlantIds,
       resources: {
         ...playerData.resources,
         seeds: playerData.resources.seeds - plant.seedCost
@@ -382,7 +384,9 @@ export async function goToWellTx(gameId: string, uid: string) {
     requireActionsRemaining(gameData);
 
     const playerData = playerSnap.data();
-    const nextSlots = playerData.gardenSlots.map((slot) => (slot === "seedling" ? "grown" : slot));
+    const nextSlots = normalizeGardenSlots(playerData).map((slot) =>
+      slot.state === "seedling" ? { ...slot, state: "grown" } : slot
+    );
 
     transaction.update(playerDocRef(gameId, playerSnap.id), {
       gardenSlots: nextSlots,
@@ -484,8 +488,9 @@ export async function activatePlantAbilityTx(gameId: string, uid: string, slotIn
 
     const playerData = playerSnap.data();
     assert(slotIndex >= 0 && slotIndex < playerData.gardenSlots.length, "Invalid garden slot.");
-    assert(playerData.gardenSlots[slotIndex] === "grown", "Only grown plants can activate abilities.");
-    const plantId = getGardenPlantIds(playerData)[slotIndex];
+    const gardenSlots = normalizeGardenSlots(playerData);
+    assert(gardenSlots[slotIndex].state === "grown", "Only grown plants can activate abilities.");
+    const plantId = gardenSlots[slotIndex].plantId;
     assert(plantId, "No plant found in selected slot.");
     const plant = getPlantCardById(plantId);
     assert(plant, "Plant card definition not found.");
@@ -594,7 +599,6 @@ export async function resolveRoundUpkeepTx(gameId: string, uid: string) {
     updatedPlayers.forEach((player) => {
       transaction.update(playerDocRef(gameId, player.id), {
         gardenSlots: player.gardenSlots,
-        gardenPlantIds: player.gardenPlantIds ?? player.gardenSlots.map(() => null),
         resources: player.resources,
         score: isGameOver ? computePlayerScore(player) : player.score
       });

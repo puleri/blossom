@@ -110,7 +110,7 @@ export default function TestingPage() {
         throw new Error("Invalid garden slot.");
       }
 
-      if (players[meIndex].gardenSlots[selectedSlot] !== "empty") {
+      if (players[meIndex].gardenSlots[selectedSlot].state !== "empty") {
         throw new Error("Selected garden slot is not empty.");
       }
 
@@ -122,7 +122,7 @@ export default function TestingPage() {
         const next = [...previous];
         const updated = { ...next[meIndex] };
         const nextSlots = [...updated.gardenSlots];
-        nextSlots[selectedSlot] = "seedling";
+        nextSlots[selectedSlot] = { state: "seedling", plantId: plant.id };
         updated.gardenSlots = nextSlots;
         updated.hand = updated.hand.filter((cardId) => cardId !== selectedPlantId);
         updated.resources = { ...updated.resources, seeds: updated.resources.seeds - plant.seedCost };
@@ -143,7 +143,7 @@ export default function TestingPage() {
 
           return {
             ...player,
-            gardenSlots: player.gardenSlots.map((slot) => (slot === "seedling" ? "grown" : slot)),
+            gardenSlots: player.gardenSlots.map((slot) => (slot.state === "seedling" ? { ...slot, state: "grown" } : slot)),
             resources: {
               ...player.resources,
               water: player.resources.water + 2

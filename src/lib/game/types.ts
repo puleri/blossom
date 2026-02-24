@@ -4,6 +4,11 @@ export type Phase = "lobby" | "setup" | "event" | "turns" | "upkeep" | "ended";
 
 export type GardenSlotState = "empty" | "seedling" | "grown" | "withered";
 
+export interface GardenSlot {
+  state: GardenSlotState;
+  plantId: string | null;
+}
+
 export type ResourceKey = "water" | "seeds" | "flowers" | "bugs";
 
 export interface PlayerResources {
@@ -41,7 +46,7 @@ export interface PlayerDoc {
   resources: PlayerResources;
   score: number;
   hand: string[];
-  gardenSlots: GardenSlotState[];
+  gardenSlots: GardenSlot[];
   gardenPlantIds?: Array<string | null>;
   keptFromMulligan: boolean;
 }
