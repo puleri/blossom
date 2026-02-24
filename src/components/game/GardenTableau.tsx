@@ -1,4 +1,4 @@
-import { getPlantCardById } from "@/lib/game/cards/details";
+import { getPlantAbilityDescriptions, getPlantCardById } from "@/lib/game/cards/details";
 import type { GardenSlot } from "@/lib/game/types";
 
 interface GardenTableauProps {
@@ -28,6 +28,9 @@ export function GardenTableau({ slots }: GardenTableauProps) {
                   </p>
                   <p style={{ margin: "6px 0", fontSize: 12 }}>
                     Decay {plant.decayPerRound} · Upkeep {plant.requiresUpkeep ? "Yes" : "No"}
+                  </p>
+                  <p style={{ margin: "6px 0", fontSize: 12 }}>
+                    Ability: {getPlantAbilityDescriptions(plant.abilities).join(" · ")}
                   </p>
                 </>
               ) : null}
