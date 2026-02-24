@@ -61,6 +61,7 @@ export default function Home() {
     <main>
       <h1>Blossom</h1>
       <p>Create a game lobby or join an existing one.</p>
+      <p>Need a local UI sandbox? Visit <a href="/testing">/testing</a>.</p>
 
       <label htmlFor="displayName">Display name</label>
       <input
