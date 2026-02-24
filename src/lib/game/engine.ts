@@ -1,31 +1,30 @@
 import { getPlantCardById } from "@/lib/game/cards/details";
-import type { EventCard, PlayerDoc } from "@/lib/game/types";
+import type { EventCard, GardenSlot, GardenSlotState, PlayerDoc } from "@/lib/game/types";
 
 function clampResource(value: number) {
   return Math.max(0, value);
 }
 
-function getGardenPlantIds(player: PlayerDoc) {
-  return player.gardenPlantIds ?? player.gardenSlots.map(() => null);
+function normalizeGardenSlots(player: PlayerDoc): GardenSlot[] {
+  return player.gardenSlots.map((slot, index) => {
+    if (typeof slot === "string") {
+      return { state: slot as GardenSlotState, plantId: player.gardenPlantIds?.[index] ?? null };
+    }
+
+    return { state: slot.state, plantId: slot.plantId ?? null };
+  });
 }
 
 function computeTableauPlantPoints(player: PlayerDoc) {
-  const plantIds = getGardenPlantIds(player);
+  const slots = normalizeGardenSlots(player);
 
-  return player.gardenSlots.reduce((total, slot, index) => {
-    const plantId = plantIds[index];
-    const card = plantId ? getPlantCardById(plantId) : null;
-
-    if (slot === "grown") {
-      return total + (card?.points ?? 2);
+  return slots.reduce((total, slot) => {
+    if (slot.state !== "grown") {
+      return total;
     }
 
-    if (slot === "seedling") {
-      const basePoints = card?.points ?? 2;
-      return total + Math.max(1, Math.floor(basePoints / 2));
-    }
-
-    return total;
+    const card = slot.plantId ? getPlantCardById(slot.plantId) : null;
+    return total + (card?.points ?? 0);
   }, 0);
 }
 
@@ -45,47 +44,40 @@ export function applyEventToPlayers(players: PlayerDoc[], event: EventCard): Pla
 }
 
 export function applyPlantDecayAndDeaths(player: PlayerDoc): PlayerDoc {
-  const currentPlantIds = getGardenPlantIds(player);
-  const nextPlantIds = [...currentPlantIds];
-
-  const nextSlots = player.gardenSlots.map((slot, index) => {
-    const plantId = currentPlantIds[index];
-    const card = plantId ? getPlantCardById(plantId) : null;
-
-    if (slot === "empty" || slot === "withered") {
-      nextPlantIds[index] = null;
-      return slot;
+  const nextSlots = normalizeGardenSlots(player).map((slot) => {
+    if (slot.state === "empty" || slot.state === "withered") {
+      return { state: slot.state, plantId: null };
     }
 
+    const card = slot.plantId ? getPlantCardById(slot.plantId) : null;
     if (!card || !card.requiresUpkeep || card.decayPerRound <= 0) {
       return slot;
     }
 
-    if (slot === "grown") {
+    if (slot.state === "grown") {
       if (card.decayPerRound >= 2) {
-        nextPlantIds[index] = null;
-        return "withered";
+        return { state: "withered", plantId: null };
       }
 
-      return "seedling";
+      return { ...slot, state: "seedling" };
     }
 
-    if (slot === "seedling" && card.decayPerRound >= 2) {
-      nextPlantIds[index] = null;
-      return "withered";
+    if (slot.state === "seedling" && card.decayPerRound >= 2) {
+      return { state: "withered", plantId: null };
     }
 
     return slot;
   });
 
-  return { ...player, gardenSlots: nextSlots, gardenPlantIds: nextPlantIds };
+  return { ...player, gardenSlots: nextSlots };
 }
 
 export function applyAdjacentPairBonuses(player: PlayerDoc): PlayerDoc {
+  const slots = normalizeGardenSlots(player);
   let adjacentGrownPairs = 0;
 
-  for (let i = 0; i < player.gardenSlots.length - 1; i += 1) {
-    if (player.gardenSlots[i] === "grown" && player.gardenSlots[i + 1] === "grown") {
+  for (let i = 0; i < slots.length - 1; i += 1) {
+    if (slots[i].state === "grown" && slots[i + 1].state === "grown") {
       adjacentGrownPairs += 1;
     }
   }
@@ -100,7 +92,7 @@ export function applyAdjacentPairBonuses(player: PlayerDoc): PlayerDoc {
 }
 
 export function collectFlowerTokens(player: PlayerDoc): PlayerDoc {
-  const grownCount = player.gardenSlots.filter((slot) => slot === "grown").length;
+  const grownCount = normalizeGardenSlots(player).filter((slot) => slot.state === "grown").length;
 
   return {
     ...player,
