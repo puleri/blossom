@@ -175,6 +175,8 @@ export default function GamePage({ params }: GamePageProps) {
 
   const isMyTurn = Boolean(me?.id && game.activePlayerId === me.id);
   const disableActionControls = loading || (game.phase === "turns" && !isMyTurn);
+  const remainingTurnActions = game.phase === "turns" ? Math.max(0, game.remainingActions ?? 0) : 0;
+  const actionsExhausted = game.phase === "turns" && isMyTurn && remainingTurnActions <= 0;
 
   const currentPlant = PLANT_CARDS.find((plant) => plant.id === selectedPlantId) ?? null;
   const currentEvent = EVENT_CARDS.find((event) => event.id === game.currentEventId) ?? null;
@@ -286,6 +288,7 @@ export default function GamePage({ params }: GamePageProps) {
           {isMyTurn && currentPlayer ? (
             <section>
               <h3>Your turn actions</h3>
+              <p>Actions remaining: {remainingTurnActions}</p>
               <label>
                 Plant from hand
                 <select value={selectedPlantId} onChange={(event) => setSelectedPlantId(event.target.value)}>
@@ -308,6 +311,8 @@ export default function GamePage({ params }: GamePageProps) {
                 </select>
               </label>
 
+              {actionsExhausted ? <p>No actions left. Your turn will advance automatically.</p> : null}
+
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                 <button
                   onClick={() =>
@@ -317,7 +322,13 @@ export default function GamePage({ params }: GamePageProps) {
                       await sowPlantTx(gameId, user.uid, selectedPlantId, selectedSlot);
                     })
                   }
-                  disabled={Boolean(busyAction) || !selectedPlantId || !currentPlant || currentPlayer.resources.seeds < currentPlant.seedCost}
+                  disabled={
+                    Boolean(busyAction) ||
+                    actionsExhausted ||
+                    !selectedPlantId ||
+                    !currentPlant ||
+                    currentPlayer.resources.seeds < currentPlant.seedCost
+                  }
                 >
                   {busyAction === "sow" ? "Sowing..." : "Sow"}
                 </button>
@@ -329,7 +340,7 @@ export default function GamePage({ params }: GamePageProps) {
                       await goToWellTx(gameId, user.uid);
                     })
                   }
-                  disabled={Boolean(busyAction)}
+                  disabled={Boolean(busyAction) || actionsExhausted}
                 >
                   {busyAction === "well" ? "Visiting well..." : "Go to the well (water all seeds + gain 2 water)"}
                 </button>
@@ -341,7 +352,7 @@ export default function GamePage({ params }: GamePageProps) {
                       await drawPlantCardTx(gameId, user.uid);
                     })
                   }
-                  disabled={Boolean(busyAction)}
+                  disabled={Boolean(busyAction) || actionsExhausted}
                 >
                   {busyAction === "draw-plant" ? "Drawing..." : "Draw a plant card"}
                 </button>
@@ -353,7 +364,7 @@ export default function GamePage({ params }: GamePageProps) {
                       await passTurnTx(gameId, user.uid);
                     })
                   }
-                  disabled={Boolean(busyAction)}
+                  disabled={Boolean(busyAction) || actionsExhausted}
                 >
                   {busyAction === "pass" ? "Passing..." : "Pass turn"}
                 </button>

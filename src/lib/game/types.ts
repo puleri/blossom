@@ -57,6 +57,7 @@ export interface GameDoc {
   activePlayerId: string | null;
   playerOrder: string[];
   turnIndex: number;
+  remainingActions: number;
   eventDeck: EventCard[];
   plantDeck: string[];
   lastPhaseResolvedRound: number | null;

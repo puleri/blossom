@@ -10,7 +10,7 @@ import {
   type Transaction
 } from "firebase/firestore";
 import { firestore } from "@/lib/firestore";
-import { GARDEN_SLOT_DEFAULT, ROUNDS_TOTAL, SETUP_HAND_SIZE, SETUP_STARTING_RESOURCES } from "@/lib/game/constants";
+import { ACTIONS_PER_TURN, GARDEN_SLOT_DEFAULT, ROUNDS_TOTAL, SETUP_HAND_SIZE, SETUP_STARTING_RESOURCES } from "@/lib/game/constants";
 import { EVENT_CARDS } from "@/lib/game/cards/events";
 import { PLANT_CARDS, PLANT_CARD_IDS } from "@/lib/game/cards/plants";
 import { drawFromDeck, drawSetupHands, revealNextEvent, shuffleFisherYates } from "@/lib/game/decks";
@@ -52,6 +52,30 @@ function getPlantById(plantId: string) {
   return PLANT_CARDS.find((card) => card.id === plantId);
 }
 
+function getRemainingActions(game: Omit<GameDoc, "id">) {
+  return game.remainingActions ?? ACTIONS_PER_TURN;
+}
+
+function requireActionsRemaining(game: Omit<GameDoc, "id">) {
+  assert(getRemainingActions(game) > 0, "No actions remaining. End your turn.");
+}
+
+function resolveNextTurnState(game: Omit<GameDoc, "id">, players: QueryDocumentSnapshot<Omit<PlayerDoc, "id">>[], currentPlayerId: string) {
+  const order = game.playerOrder.length ? game.playerOrder : players.map((snapshot) => snapshot.id);
+  const currentIndex = game.turnIndex;
+  assert(order[currentIndex] === currentPlayerId, "Turn order is out of sync.");
+
+  const nextIndex = currentIndex + 1;
+  const wrapped = nextIndex >= order.length;
+
+  return {
+    wrapped,
+    nextState: wrapped
+      ? { phase: "upkeep" as const, activePlayerId: null, turnIndex: 0, remainingActions: ACTIONS_PER_TURN }
+      : { activePlayerId: order[nextIndex], turnIndex: nextIndex, remainingActions: ACTIONS_PER_TURN }
+  };
+}
+
 export async function createGameTx(hostDisplayName: string, uid: string) {
   assert(uid, "Missing authenticated user (uid). Please refresh and try again.");
   const gameRef = doc(collection(firestore, "games"));
@@ -69,6 +93,7 @@ export async function createGameTx(hostDisplayName: string, uid: string) {
       activePlayerId: null,
       playerOrder: [],
       turnIndex: 0,
+      remainingActions: ACTIONS_PER_TURN,
       eventDeck: shuffleFisherYates(EVENT_CARDS),
       plantDeck: [],
       currentEventId: null,
@@ -156,6 +181,7 @@ export async function startGameSetupTx(gameId: string, uid: string) {
       activePlayerId: null,
       playerOrder: orderedPlayerIds,
       turnIndex: 0,
+      remainingActions: ACTIONS_PER_TURN,
       plantDeck: remainingDeck,
       currentEventId: null,
       lastPhaseResolvedRound: null
@@ -226,6 +252,7 @@ export async function submitSetupKeepTx(
         phase: "turns",
         activePlayerId,
         turnIndex: 0,
+        remainingActions: ACTIONS_PER_TURN,
         eventDeck: remainingDeck,
         currentEventId: event.id
       });
@@ -268,6 +295,7 @@ export async function resolveRoundEventTx(gameId: string, uid: string) {
       phase: "turns",
       activePlayerId,
       turnIndex: 0,
+      remainingActions: ACTIONS_PER_TURN,
       eventDeck: remainingDeck,
       currentEventId: event.id
     });
@@ -287,6 +315,7 @@ export async function sowPlantTx(gameId: string, uid: string, plantId: string, s
 
     const playerSnap = getPlayerByUid(players, uid);
     assert(gameData.activePlayerId === playerSnap.id, "Only the active player can perform turn actions.");
+    requireActionsRemaining(gameData);
 
     const playerData = playerSnap.data();
     assert(slotIndex >= 0 && slotIndex < playerData.gardenSlots.length, "Invalid garden slot.");
@@ -310,6 +339,21 @@ export async function sowPlantTx(gameId: string, uid: string, plantId: string, s
       }
     });
 
+    const remainingActions = getRemainingActions(gameData) - 1;
+    if (remainingActions <= 0) {
+      const nextTurn = resolveNextTurnState(gameData, players, playerSnap.id);
+      transaction.update(gameDocRef(gameId), nextTurn.nextState);
+      appendLog(transaction, gameId, {
+        message: nextTurn.wrapped
+          ? `Round ${gameData.round} turns complete. Entering upkeep.`
+          : `${playerData.displayName} exhausted their actions. Turn auto-ended.`,
+        playerId: playerSnap.id,
+        type: "action"
+      });
+    } else {
+      transaction.update(gameDocRef(gameId), { remainingActions });
+    }
+
     appendLog(transaction, gameId, {
       message: `${playerData.displayName} sowed ${plant.name} in slot ${slotIndex + 1}.`,
       playerId: playerSnap.id,
@@ -329,6 +373,7 @@ export async function goToWellTx(gameId: string, uid: string) {
 
     const playerSnap = getPlayerByUid(players, uid);
     assert(gameData.activePlayerId === playerSnap.id, "Only the active player can perform turn actions.");
+    requireActionsRemaining(gameData);
 
     const playerData = playerSnap.data();
     const nextSlots = playerData.gardenSlots.map((slot) => (slot === "seedling" ? "grown" : slot));
@@ -340,6 +385,21 @@ export async function goToWellTx(gameId: string, uid: string) {
         water: playerData.resources.water + 2
       }
     });
+
+    const remainingActions = getRemainingActions(gameData) - 1;
+    if (remainingActions <= 0) {
+      const nextTurn = resolveNextTurnState(gameData, players, playerSnap.id);
+      transaction.update(gameDocRef(gameId), nextTurn.nextState);
+      appendLog(transaction, gameId, {
+        message: nextTurn.wrapped
+          ? `Round ${gameData.round} turns complete. Entering upkeep.`
+          : `${playerData.displayName} exhausted their actions. Turn auto-ended.`,
+        playerId: playerSnap.id,
+        type: "action"
+      });
+    } else {
+      transaction.update(gameDocRef(gameId), { remainingActions });
+    }
 
     appendLog(transaction, gameId, {
       message: `${playerData.displayName} went to the well, watered all seeds, and gained 2 water.`,
@@ -361,6 +421,7 @@ export async function drawPlantCardTx(gameId: string, uid: string) {
 
     const playerSnap = getPlayerByUid(players, uid);
     assert(gameData.activePlayerId === playerSnap.id, "Only the active player can perform turn actions.");
+    requireActionsRemaining(gameData);
 
     const draw = drawFromDeck(gameData.plantDeck ?? [], 1);
     assert(draw.drawn.length === 1, "Plant deck is empty.");
@@ -372,9 +433,23 @@ export async function drawPlantCardTx(gameId: string, uid: string) {
       hand: [...playerData.hand, drawnCardId]
     });
 
-    transaction.update(gameRef, {
-      plantDeck: draw.remainingDeck
-    });
+    const remainingActions = getRemainingActions(gameData) - 1;
+    if (remainingActions <= 0) {
+      const nextTurn = resolveNextTurnState(gameData, players, playerSnap.id);
+      transaction.update(gameRef, { ...nextTurn.nextState, plantDeck: draw.remainingDeck });
+      appendLog(transaction, gameId, {
+        message: nextTurn.wrapped
+          ? `Round ${gameData.round} turns complete. Entering upkeep.`
+          : `${playerData.displayName} exhausted their actions. Turn auto-ended.`,
+        playerId: playerSnap.id,
+        type: "action"
+      });
+    } else {
+      transaction.update(gameRef, {
+        plantDeck: draw.remainingDeck,
+        remainingActions
+      });
+    }
 
     appendLog(transaction, gameId, {
       message: `${playerData.displayName} drew a plant card (${drawnCardId}).`,
@@ -399,6 +474,7 @@ export async function activatePlantAbilityTx(gameId: string, uid: string, slotIn
 
     const playerSnap = getPlayerByUid(players, uid);
     assert(gameData.activePlayerId === playerSnap.id, "Only the active player can perform turn actions.");
+    requireActionsRemaining(gameData);
 
     const playerData = playerSnap.data();
     assert(slotIndex >= 0 && slotIndex < playerData.gardenSlots.length, "Invalid garden slot.");
@@ -412,6 +488,21 @@ export async function activatePlantAbilityTx(gameId: string, uid: string, slotIn
         flowers: playerData.resources.flowers + 1
       }
     });
+
+    const remainingActions = getRemainingActions(gameData) - 1;
+    if (remainingActions <= 0) {
+      const nextTurn = resolveNextTurnState(gameData, players, playerSnap.id);
+      transaction.update(gameDocRef(gameId), nextTurn.nextState);
+      appendLog(transaction, gameId, {
+        message: nextTurn.wrapped
+          ? `Round ${gameData.round} turns complete. Entering upkeep.`
+          : `${playerData.displayName} exhausted their actions. Turn auto-ended.`,
+        playerId: playerSnap.id,
+        type: "action"
+      });
+    } else {
+      transaction.update(gameDocRef(gameId), { remainingActions });
+    }
 
     appendLog(transaction, gameId, {
       message: `${playerData.displayName} activated a plant ability at slot ${slotIndex + 1}.`,
@@ -434,22 +525,12 @@ export async function advanceTurnOrRoundTx(gameId: string, uid: string) {
     const currentPlayerSnap = getPlayerByUid(players, uid);
     assert(gameData.activePlayerId === currentPlayerSnap.id, "Only the active player can end their turn.");
 
-    const order = gameData.playerOrder.length ? gameData.playerOrder : players.map((snapshot) => snapshot.id);
-    const currentIndex = gameData.turnIndex;
-    assert(order[currentIndex] === currentPlayerSnap.id, "Turn order is out of sync.");
+    const nextTurn = resolveNextTurnState(gameData, players, currentPlayerSnap.id);
 
-    const nextIndex = currentIndex + 1;
-    const wrapped = nextIndex >= order.length;
-
-    transaction.update(
-      gameRef,
-      wrapped
-        ? { phase: "upkeep", activePlayerId: null, turnIndex: 0 }
-        : { activePlayerId: order[nextIndex], turnIndex: nextIndex }
-    );
+    transaction.update(gameRef, nextTurn.nextState);
 
     appendLog(transaction, gameId, {
-      message: wrapped
+      message: nextTurn.wrapped
         ? `Round ${gameData.round} turns complete. Entering upkeep.`
         : `${currentPlayerSnap.data().displayName} ended their turn.`,
       playerId: currentPlayerSnap.id,
@@ -509,6 +590,7 @@ export async function resolveRoundUpkeepTx(gameId: string, uid: string) {
       status: isGameOver ? "ended" : gameData.status,
       activePlayerId: isGameOver ? null : gameData.playerOrder[0] ?? players[0]?.id ?? null,
       turnIndex: 0,
+      remainingActions: ACTIONS_PER_TURN,
       round: isGameOver ? gameData.round : nextRound,
       lastPhaseResolvedRound: gameData.round
     });

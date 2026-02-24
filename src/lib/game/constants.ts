@@ -6,6 +6,8 @@ export const GARDEN_SLOT_DEFAULT = 6;
 
 export const SETUP_HAND_SIZE = 5;
 
+export const ACTIONS_PER_TURN = 2;
+
 export const SETUP_STARTING_RESOURCES = {
   water: 3,
   seeds: 2,
