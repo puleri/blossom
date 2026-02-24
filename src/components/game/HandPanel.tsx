@@ -1,3 +1,5 @@
+import { getPlantSummaryLabel } from "@/lib/game/cards/details";
+
 interface HandPanelProps {
   hand: string[];
 }
@@ -11,7 +13,7 @@ export function HandPanel({ hand }: HandPanelProps) {
       ) : (
         <ul>
           {hand.map((cardId) => (
-            <li key={cardId}>{cardId}</li>
+            <li key={cardId}>{getPlantSummaryLabel(cardId)}</li>
           ))}
         </ul>
       )}
