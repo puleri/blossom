@@ -19,6 +19,7 @@ import {
   applyAdjacentPairBonuses,
   applyEventToPlayers,
   applyPlantDecayAndDeaths,
+  applyResourcePressureCaps,
   collectFlowerTokens,
   computePlayerScore
 } from "@/lib/game/engine";
@@ -65,6 +66,35 @@ function getRemainingActions(game: Omit<GameDoc, "id">) {
 
 function requireActionsRemaining(game: Omit<GameDoc, "id">) {
   assert(getRemainingActions(game) > 0, "No actions remaining. End your turn.");
+}
+
+function consumeTurnAction(
+  transaction: Transaction,
+  gameId: string,
+  game: Omit<GameDoc, "id">,
+  players: QueryDocumentSnapshot<Omit<PlayerDoc, "id">>[],
+  playerId: string,
+  displayName: string
+) {
+  const remainingActions = getRemainingActions(game) - 1;
+  if (remainingActions <= 0) {
+    const nextTurn = resolveNextTurnState(game, players, playerId);
+    transaction.update(gameDocRef(gameId), nextTurn.nextState);
+    appendLog(transaction, gameId, {
+      message: nextTurn.wrapped
+        ? `Round ${game.round} turns complete. Entering upkeep.`
+        : `${displayName} exhausted their actions. Turn auto-ended.`,
+      playerId,
+      type: "action"
+    });
+    return;
+  }
+
+  transaction.update(gameDocRef(gameId), { remainingActions });
+}
+
+function getCurrentEvent(game: Omit<GameDoc, "id">) {
+  return EVENT_CARDS.find((event) => event.id === game.currentEventId) ?? null;
 }
 
 function resolveNextTurnState(game: Omit<GameDoc, "id">, players: QueryDocumentSnapshot<Omit<PlayerDoc, "id">>[], currentPlayerId: string) {
@@ -469,6 +499,144 @@ export async function drawPlantCardTx(gameId: string, uid: string) {
   });
 }
 
+export async function tradeWaterForSeedsTx(gameId: string, uid: string) {
+  const players = await getOrderedPlayers(gameId);
+
+  return runTransaction(firestore, async (transaction) => {
+    const gameSnap = await transaction.get(gameDocRef(gameId));
+    assert(gameSnap.exists(), "Game not found.");
+    const gameData = gameSnap.data();
+    requireTurnPhase(gameData);
+
+    const playerSnap = getPlayerByUid(players, uid);
+    assert(gameData.activePlayerId === playerSnap.id, "Only the active player can perform turn actions.");
+    requireActionsRemaining(gameData);
+
+    const playerData = playerSnap.data();
+    const waterCost = 2;
+    assert(playerData.resources.water >= waterCost, "Not enough water to trade.");
+
+    const currentEvent = getCurrentEvent(gameData);
+    const eventModifier = currentEvent?.id === "rain" || currentEvent?.id === "seedBurst" || currentEvent?.id === "sprinkle"
+      ? 1
+      : currentEvent?.id === "drought" || currentEvent?.id === "dryHeat"
+        ? -1
+        : 0;
+    const seedsGained = Math.max(1, Math.min(2, 1 + eventModifier));
+
+    transaction.update(playerDocRef(gameId, playerSnap.id), {
+      resources: {
+        ...playerData.resources,
+        water: playerData.resources.water - waterCost,
+        seeds: playerData.resources.seeds + seedsGained
+      }
+    });
+
+    consumeTurnAction(transaction, gameId, gameData, players, playerSnap.id, playerData.displayName);
+
+    appendLog(transaction, gameId, {
+      message: `${playerData.displayName} risked ${waterCost} water for seed stock and got ${seedsGained} seed${seedsGained === 1 ? "" : "s"}${
+        currentEvent ? ` under ${currentEvent.name}` : ""
+      }.`,
+      playerId: playerSnap.id,
+      type: "action"
+    });
+  });
+}
+
+export async function compostWitheredTx(gameId: string, uid: string, slotIndex: number) {
+  const players = await getOrderedPlayers(gameId);
+
+  return runTransaction(firestore, async (transaction) => {
+    const gameSnap = await transaction.get(gameDocRef(gameId));
+    assert(gameSnap.exists(), "Game not found.");
+    const gameData = gameSnap.data();
+    requireTurnPhase(gameData);
+
+    const playerSnap = getPlayerByUid(players, uid);
+    assert(gameData.activePlayerId === playerSnap.id, "Only the active player can perform turn actions.");
+    requireActionsRemaining(gameData);
+
+    const playerData = playerSnap.data();
+    assert(slotIndex >= 0 && slotIndex < playerData.gardenSlots.length, "Invalid garden slot.");
+    const nextSlots = normalizeGardenSlots(playerData);
+    assert(nextSlots[slotIndex].state === "withered", "Select a withered slot to compost.");
+
+    const currentEvent = getCurrentEvent(gameData);
+    const bugPenalty = Math.random() < 0.35 ? 1 : 0;
+    const seedBonus = currentEvent?.id === "seedBurst" ? 1 : 0;
+    const flowerBonus = currentEvent?.id === "pollination" ? 1 : 0;
+    const seedsGained = 1 + seedBonus;
+    const flowersGained = 1 + flowerBonus;
+
+    nextSlots[slotIndex] = { state: "empty", plantId: null };
+
+    transaction.update(playerDocRef(gameId, playerSnap.id), {
+      gardenSlots: nextSlots,
+      resources: {
+        ...playerData.resources,
+        seeds: playerData.resources.seeds + seedsGained,
+        flowers: playerData.resources.flowers + flowersGained,
+        bugs: playerData.resources.bugs + bugPenalty
+      }
+    });
+
+    consumeTurnAction(transaction, gameId, gameData, players, playerSnap.id, playerData.displayName);
+
+    appendLog(transaction, gameId, {
+      message: `${playerData.displayName} composted withered slot ${slotIndex + 1} (stake: permanently clear the slot) and gained +${seedsGained} seed${
+        seedsGained === 1 ? "" : "s"
+      }/+${flowersGained} flower${flowersGained === 1 ? "" : "s"}${bugPenalty ? ", but attracted +1 bug" : " with no bug penalty"}.`,
+      playerId: playerSnap.id,
+      type: "action"
+    });
+  });
+}
+
+export async function gambleBloomTx(gameId: string, uid: string) {
+  const players = await getOrderedPlayers(gameId);
+
+  return runTransaction(firestore, async (transaction) => {
+    const gameSnap = await transaction.get(gameDocRef(gameId));
+    assert(gameSnap.exists(), "Game not found.");
+    const gameData = gameSnap.data();
+    requireTurnPhase(gameData);
+
+    const playerSnap = getPlayerByUid(players, uid);
+    assert(gameData.activePlayerId === playerSnap.id, "Only the active player can perform turn actions.");
+    requireActionsRemaining(gameData);
+
+    const playerData = playerSnap.data();
+    const waterCost = 2;
+    assert(playerData.resources.water >= waterCost, "Not enough water to gamble.");
+
+    const currentEvent = getCurrentEvent(gameData);
+    const roll = Math.floor(Math.random() * 5);
+    const eventFlowerBonus = currentEvent?.id === "pollination" ? 1 : 0;
+    const flowersGained = roll + eventFlowerBonus;
+    const bugPenalty = roll <= 1 ? 1 + (currentEvent?.id === "infestation" ? 1 : 0) : 0;
+
+    transaction.update(playerDocRef(gameId, playerSnap.id), {
+      resources: {
+        ...playerData.resources,
+        water: playerData.resources.water - waterCost,
+        flowers: playerData.resources.flowers + flowersGained,
+        bugs: playerData.resources.bugs + bugPenalty
+      }
+    });
+
+    consumeTurnAction(transaction, gameId, gameData, players, playerSnap.id, playerData.displayName);
+
+    appendLog(transaction, gameId, {
+      message: `${playerData.displayName} gambled ${waterCost} water for a bloom roll (rolled ${roll}) and gained ${flowersGained} flower${
+        flowersGained === 1 ? "" : "s"
+      }${bugPenalty ? `, but paid ${bugPenalty} bug penalty` : ", with no bug penalty"}.`,
+      playerId: playerSnap.id,
+      type: "action"
+    });
+  });
+}
+
 export async function passTurnTx(gameId: string, uid: string) {
   return advanceTurnOrRoundTx(gameId, uid);
 }
@@ -580,12 +748,13 @@ export async function resolveRoundUpkeepTx(gameId: string, uid: string) {
       const afterDecay = applyPlantDecayAndDeaths(basePlayer);
       const afterAdjacentBonuses = applyAdjacentPairBonuses(afterDecay);
       const afterFlowerCollection = collectFlowerTokens(afterAdjacentBonuses);
+      const afterResourcePressure = applyResourcePressureCaps(afterFlowerCollection);
 
       return {
-        ...afterFlowerCollection,
+        ...afterResourcePressure,
         resources: {
-          ...afterFlowerCollection.resources,
-          water: afterFlowerCollection.resources.water + 1
+          ...afterResourcePressure.resources,
+          water: afterResourcePressure.resources.water + 1
         }
       };
     });

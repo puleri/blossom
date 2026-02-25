@@ -9,12 +9,15 @@ import { HandPanel } from "@/components/game/HandPanel";
 import { GameLog } from "@/components/game/GameLog";
 import { leaveGame, startGameFromLobby } from "@/lib/game/gameService";
 import {
+  compostWitheredTx,
   drawPlantCardTx,
+  gambleBloomTx,
   goToWellTx,
   passTurnTx,
   resolveRoundUpkeepTx,
   sowPlantTx,
-  submitSetupKeepTx
+  submitSetupKeepTx,
+  tradeWaterForSeedsTx
 } from "@/lib/game/actions";
 import { EVENT_CARDS } from "@/lib/game/cards/events";
 import { getPlantCardById, getPlantSummaryLabel } from "@/lib/game/cards/details";
@@ -42,6 +45,7 @@ export default function GamePage({ params }: GamePageProps) {
   const [setupDiscardedResources, setSetupDiscardedResources] = useState<ResourceKey[]>([]);
   const [selectedPlantId, setSelectedPlantId] = useState<string>("");
   const [selectedSlot, setSelectedSlot] = useState<number>(0);
+  const [selectedWitheredSlot, setSelectedWitheredSlot] = useState<number>(0);
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const loading = gameLoading || playersLoading || meLoading;
 
@@ -77,6 +81,7 @@ export default function GamePage({ params }: GamePageProps) {
       setSetupKeptPlantIds([]);
       setSetupDiscardedResources([]);
       setSelectedPlantId("");
+      setSelectedWitheredSlot(0);
       return;
     }
 
@@ -100,6 +105,15 @@ export default function GamePage({ params }: GamePageProps) {
     });
   }, [setupKeptPlantIds]);
 
+
+  useEffect(() => {
+    if (!currentPlayer) {
+      return;
+    }
+
+    const firstWitheredIndex = currentPlayer.gardenSlots.findIndex((slot) => slot.state === "withered");
+    setSelectedWitheredSlot(firstWitheredIndex >= 0 ? firstWitheredIndex : 0);
+  }, [currentPlayer]);
   if (loading) {
     return <main>Loading game...</main>;
   }
@@ -275,7 +289,7 @@ export default function GamePage({ params }: GamePageProps) {
 
       {game.phase === "turns" ? (
         <>
-          <p>Turns phase is in progress. A sown plant stays a seed until it is watered, and seeds cannot wither.</p>
+          <p>Turns phase is in progress. A sown plant stays a seed until it is watered, and seeds cannot wither. Each turn includes safe lines (well/draw/pass) and risky lines (trade/compost/gamble).</p>
           {currentEvent ? (
             <p>
               Round event in play: <strong>{currentEvent.name}</strong> — {currentEvent.description} (resolves at round end)
@@ -311,7 +325,19 @@ export default function GamePage({ params }: GamePageProps) {
                 </select>
               </label>
 
+              <label>
+                Withered slot for compost (risky)
+                <select value={selectedWitheredSlot} onChange={(event) => setSelectedWitheredSlot(Number(event.target.value))}>
+                  {currentPlayer.gardenSlots.map((slot, index) => (
+                    <option key={`withered-slot-${index}`} value={index} disabled={slot.state !== "withered"}>
+                      Slot {index + 1} {slot.state === "withered" ? "(withered)" : ""}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
               {actionsExhausted ? <p>No actions left. Your turn will advance automatically.</p> : null}
+              {!actionsExhausted ? <p style={{ marginTop: 8 }}>Safe actions: Well, Draw, Pass. Risky actions: Trade Water for Seeds, Compost Withered, Gamble Bloom.</p> : null}
 
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                 <button
@@ -355,6 +381,49 @@ export default function GamePage({ params }: GamePageProps) {
                   disabled={Boolean(busyAction) || actionsExhausted}
                 >
                   {busyAction === "draw-plant" ? "Drawing..." : "Draw a plant card"}
+                </button>
+
+                <button
+                  onClick={() =>
+                    runAction("trade-water-seeds", async () => {
+                      if (!user?.uid) throw new Error("Missing authenticated user id.");
+                      await tradeWaterForSeedsTx(gameId, user.uid);
+                    })
+                  }
+                  disabled={Boolean(busyAction) || actionsExhausted || currentPlayer.resources.water < 2}
+                  title="Risky: spend 2 water to gain 1-2 seeds depending on event pressure."
+                >
+                  {busyAction === "trade-water-seeds" ? "Trading..." : "Trade 2 water for seeds (risky)"}
+                </button>
+
+                <button
+                  onClick={() =>
+                    runAction("compost", async () => {
+                      if (!user?.uid) throw new Error("Missing authenticated user id.");
+                      await compostWitheredTx(gameId, user.uid, selectedWitheredSlot);
+                    })
+                  }
+                  disabled={
+                    Boolean(busyAction) ||
+                    actionsExhausted ||
+                    !currentPlayer.gardenSlots.some((slot) => slot.state === "withered")
+                  }
+                  title="Risky: consume a withered slot for growth resources, but compost can attract bugs."
+                >
+                  {busyAction === "compost" ? "Composting..." : "Compost withered slot (risky)"}
+                </button>
+
+                <button
+                  onClick={() =>
+                    runAction("gamble-bloom", async () => {
+                      if (!user?.uid) throw new Error("Missing authenticated user id.");
+                      await gambleBloomTx(gameId, user.uid);
+                    })
+                  }
+                  disabled={Boolean(busyAction) || actionsExhausted || currentPlayer.resources.water < 2}
+                  title="Risky: spend 2 water and roll for flowers; low rolls add bugs."
+                >
+                  {busyAction === "gamble-bloom" ? "Gambling..." : "Gamble bloom (risky)"}
                 </button>
 
                 <button
