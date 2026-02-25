@@ -1,4 +1,5 @@
 import { getPlantAbilityDescriptions, getPlantCardById } from "@/lib/game/cards/details";
+import { getPlantSchoolBorderColor } from "@/lib/game/cards/schools";
 import type { GardenSlot } from "@/lib/game/types";
 
 interface GardenTableauProps {
@@ -15,9 +16,10 @@ export function GardenTableau({ slots }: GardenTableauProps) {
         {Array.from({ length: totalSlots }, (_, index) => {
           const slot = slots[index] ?? { state: "empty", plantId: null };
           const plant = slot.plantId ? getPlantCardById(slot.plantId) : null;
+          const borderColor = slot.plantId ? getPlantSchoolBorderColor(slot.plantId) : "#ccc";
 
           return (
-            <div key={index} style={{ border: "1px solid #ccc", borderRadius: 4, padding: 8, minHeight: 130 }}>
+            <div key={index} style={{ border: `2px solid ${borderColor}`, borderRadius: 4, padding: 8, minHeight: 130 }}>
               <strong>Slot {index + 1}</strong>
               <p style={{ margin: "6px 0" }}>State: {slot.state}</p>
               {plant ? (
