@@ -86,19 +86,19 @@ export function applyAdjacentPairBonuses(player: PlayerDoc): PlayerDoc {
     ...player,
     resources: {
       ...player.resources,
-      flowers: player.resources.flowers + adjacentGrownPairs
+      buds: player.resources.buds + adjacentGrownPairs
     }
   };
 }
 
-export function collectFlowerTokens(player: PlayerDoc): PlayerDoc {
+export function collectBudTokens(player: PlayerDoc): PlayerDoc {
   const grownCount = normalizeGardenSlots(player).filter((slot) => slot.state === "grown").length;
 
   return {
     ...player,
     resources: {
       ...player.resources,
-      flowers: player.resources.flowers + grownCount
+      buds: player.resources.buds + grownCount
     }
   };
 }
@@ -112,6 +112,31 @@ export function applyResourcePressureCaps(player: PlayerDoc): PlayerDoc {
     resources: {
       ...player.resources,
       water: clampResource(player.resources.water - waterDecay)
+    }
+  };
+}
+
+
+export function harvestBudsForPoints(player: PlayerDoc): PlayerDoc {
+  const pointsGained = Math.floor(player.resources.buds / 2);
+
+  return {
+    ...player,
+    score: player.score + pointsGained,
+    resources: {
+      ...player.resources,
+      buds: 0
+    }
+  };
+}
+
+export function forceBloom(player: PlayerDoc): PlayerDoc {
+  return {
+    ...player,
+    resources: {
+      ...player.resources,
+      flowers: player.resources.flowers + player.resources.buds,
+      buds: 0
     }
   };
 }

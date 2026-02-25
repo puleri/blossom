@@ -13,7 +13,7 @@ import {
   applyAdjacentPairBonuses,
   applyEventToPlayers,
   applyPlantDecayAndDeaths,
-  collectFlowerTokens,
+  collectBudTokens,
   computePlayerScore
 } from "@/lib/game/engine";
 import { GAME_TEST_DATA } from "@/lib/testing/gameTestData";
@@ -219,13 +219,13 @@ export default function TestingPage() {
       const updatedPlayersAfterUpkeep = players.map((player) => {
         const afterDecay = applyPlantDecayAndDeaths(player);
         const afterAdjacentBonuses = applyAdjacentPairBonuses(afterDecay);
-        const afterFlowerCollection = collectFlowerTokens(afterAdjacentBonuses);
+        const afterBudCollection = collectBudTokens(afterAdjacentBonuses);
 
         return {
-          ...afterFlowerCollection,
+          ...afterBudCollection,
           resources: {
-            ...afterFlowerCollection.resources,
-            water: afterFlowerCollection.resources.water + 1
+            ...afterBudCollection.resources,
+            water: afterBudCollection.resources.water + 1
           }
         };
       });
