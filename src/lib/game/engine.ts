@@ -102,7 +102,7 @@ export function activatePlantAbilityForTurn(player: PlayerDoc, slotIndex: number
 }
 
 export function applyPlantDecayAndDeaths(player: PlayerDoc): PlayerDoc {
-  const nextSlots = normalizeGardenSlots(player).map((slot) => {
+  const nextSlots = normalizeGardenSlots(player).map<GardenSlot>((slot) => {
     if (slot.state === "empty" || slot.state === "withered") {
       return { state: slot.state, plantId: null, water: 0 };
     }
