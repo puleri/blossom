@@ -7,6 +7,7 @@ export type GardenSlotState = "empty" | "seedling" | "grown" | "withered";
 export interface GardenSlot {
   state: GardenSlotState;
   plantId: string | null;
+  water?: number;
 }
 
 export type ResourceKey = "water" | "seeds" | "buds" | "flowers" | "bugs";

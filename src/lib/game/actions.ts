@@ -57,10 +57,10 @@ async function getOrderedPlayers(gameId: string) {
 function normalizeGardenSlots(player: Omit<PlayerDoc, "id">): GardenSlot[] {
   return player.gardenSlots.map((slot, index) => {
     if (typeof slot === "string") {
-      return { state: slot as GardenSlotState, plantId: player.gardenPlantIds?.[index] ?? null };
+      return { state: slot as GardenSlotState, plantId: player.gardenPlantIds?.[index] ?? null, water: 0 };
     }
 
-    return { state: slot.state, plantId: slot.plantId ?? null };
+    return { state: slot.state, plantId: slot.plantId ?? null, water: Math.max(0, slot.water ?? 0) };
   });
 }
 
@@ -113,7 +113,7 @@ function applyBloomWitherCheck(gardenSlots: GardenSlot[]): { gardenSlots: Garden
 
   const randomIndex = grownIndices[Math.floor(Math.random() * grownIndices.length)];
   const nextSlots = [...gardenSlots];
-  nextSlots[randomIndex] = { state: "withered", plantId: null };
+  nextSlots[randomIndex] = { state: "withered", plantId: null, water: 0 };
 
   return { gardenSlots: nextSlots, withered: true };
 }
@@ -166,7 +166,7 @@ export async function createGameTx(hostDisplayName: string, uid: string) {
       resources: { ...SETUP_STARTING_RESOURCES },
       score: 0,
       hand: [],
-      gardenSlots: Array.from({ length: GARDEN_SLOT_DEFAULT }, () => ({ state: "empty", plantId: null })),
+      gardenSlots: Array.from({ length: GARDEN_SLOT_DEFAULT }, () => ({ state: "empty", plantId: null, water: 0 })),
       keptFromMulligan: false,
       abilityUsage: {}
     });
@@ -196,7 +196,7 @@ export async function joinGameTx(gameId: string, displayName: string, uid: strin
       resources: { ...SETUP_STARTING_RESOURCES },
       score: 0,
       hand: [],
-      gardenSlots: Array.from({ length: GARDEN_SLOT_DEFAULT }, () => ({ state: "empty", plantId: null })),
+      gardenSlots: Array.from({ length: GARDEN_SLOT_DEFAULT }, () => ({ state: "empty", plantId: null, water: 0 })),
       keptFromMulligan: false,
       abilityUsage: {}
     });
@@ -402,7 +402,7 @@ export async function sowPlantTx(gameId: string, uid: string, plantId: string, s
     assert(playerData.resources.seeds >= plant.seedCost, "Not enough seeds to sow this plant.");
 
     const nextSlots = normalizeGardenSlots(playerData);
-    nextSlots[slotIndex] = { state: "seedling", plantId: plant.id };
+    nextSlots[slotIndex] = { state: "seedling", plantId: plant.id, water: 0 };
 
     transaction.update(playerDocRef(gameId, playerSnap.id), {
       hand: playerData.hand.filter((cardId) => cardId !== plantId),
@@ -436,7 +436,7 @@ export async function sowPlantTx(gameId: string, uid: string, plantId: string, s
   });
 }
 
-export async function goToWellTx(gameId: string, uid: string) {
+export async function goToWellTx(gameId: string, uid: string, slotIndices: number[] = []) {
   const players = await getOrderedPlayers(gameId);
 
   return runTransaction(firestore, async (transaction) => {
@@ -450,35 +450,94 @@ export async function goToWellTx(gameId: string, uid: string) {
     requireActionsRemaining(gameData);
 
     const playerData = playerSnap.data();
-    const nextSlots = normalizeGardenSlots(playerData).map((slot) =>
-      slot.state === "seedling" ? { ...slot, state: "grown" } : slot
+    const nextSlots = normalizeGardenSlots(playerData);
+    const waterBudget = 3;
+
+    const occupiedSlots = nextSlots
+      .map((slot, index) => ({ slot, index }))
+      .filter(({ slot }) => slot.state !== "empty" && slot.state !== "withered" && !!slot.plantId);
+
+    assert(occupiedSlots.length > 0, "No living plants available to water.");
+
+    const candidateIndices = (slotIndices.length > 0 ? slotIndices : occupiedSlots.map(({ index }) => index)).filter(
+      (index, pos, all) => all.indexOf(index) === pos
     );
+
+    candidateIndices.forEach((index) => {
+      assert(index >= 0 && index < nextSlots.length, "Invalid garden slot selection for well action.");
+      assert(nextSlots[index].state !== "empty" && nextSlots[index].state !== "withered", "Can only water living plants.");
+      assert(Boolean(nextSlots[index].plantId), "Selected slot has no plant.");
+    });
+
+    let distributed = 0;
+    for (let i = 0; i < candidateIndices.length && distributed < waterBudget; i += 1) {
+      const slotIndex = candidateIndices[i];
+      const slot = nextSlots[slotIndex];
+      const card = slot.plantId ? getPlantCardById(slot.plantId) : null;
+      const capacity = card?.waterCapacity ?? 0;
+      const currentWater = slot.water ?? 0;
+      if (currentWater >= capacity) {
+        continue;
+      }
+
+      nextSlots[slotIndex] = { ...slot, water: Math.min(capacity, currentWater + 1) };
+      distributed += 1;
+    }
 
     transaction.update(playerDocRef(gameId, playerSnap.id), {
       gardenSlots: nextSlots,
       resources: {
         ...playerData.resources,
-        water: playerData.resources.water + 2
+        water: playerData.resources.water + 1
       }
     });
 
-    const remainingActions = getRemainingActions(gameData) - 1;
-    if (remainingActions <= 0) {
-      const nextTurn = resolveNextTurnState(gameData, players, playerSnap.id);
-      transaction.update(gameDocRef(gameId), nextTurn.nextState);
-      appendLog(transaction, gameId, {
-        message: nextTurn.wrapped
-          ? `Round ${gameData.round} turns complete. Entering upkeep.`
-          : `${playerData.displayName} exhausted their actions. Turn auto-ended.`,
-        playerId: playerSnap.id,
-        type: "action"
-      });
-    } else {
-      transaction.update(gameDocRef(gameId), { remainingActions });
-    }
+    consumeTurnAction(transaction, gameId, gameData, players, playerSnap.id, playerData.displayName);
 
     appendLog(transaction, gameId, {
-      message: `${playerData.displayName} went to the well, watered all seeds, and gained 2 water.`,
+      message: `${playerData.displayName} drew from the well and distributed ${distributed}/${waterBudget} water to chosen plants (capacity-limited), then banked +1 water.`,
+      playerId: playerSnap.id,
+      type: "action"
+    });
+  });
+}
+
+
+export async function riskyOverwaterTx(gameId: string, uid: string, slotIndex: number) {
+  const players = await getOrderedPlayers(gameId);
+
+  return runTransaction(firestore, async (transaction) => {
+    const gameSnap = await transaction.get(gameDocRef(gameId));
+    assert(gameSnap.exists(), "Game not found.");
+    const gameData = gameSnap.data();
+    requireTurnPhase(gameData);
+
+    const playerSnap = getPlayerByUid(players, uid);
+    assert(gameData.activePlayerId === playerSnap.id, "Only the active player can perform turn actions.");
+    requireActionsRemaining(gameData);
+
+    const playerData = playerSnap.data();
+    const nextSlots = normalizeGardenSlots(playerData);
+    assert(slotIndex >= 0 && slotIndex < nextSlots.length, "Invalid garden slot.");
+
+    const slot = nextSlots[slotIndex];
+    assert(slot.state !== "empty" && slot.state !== "withered", "Can only overwater living plants.");
+    assert(Boolean(slot.plantId), "Selected slot has no plant.");
+
+    nextSlots[slotIndex] = { ...slot, water: (slot.water ?? 0) + 3 };
+
+    transaction.update(playerDocRef(gameId, playerSnap.id), {
+      gardenSlots: nextSlots,
+      resources: {
+        ...playerData.resources,
+        flowers: playerData.resources.flowers + 2
+      }
+    });
+
+    consumeTurnAction(transaction, gameId, gameData, players, playerSnap.id, playerData.displayName);
+
+    appendLog(transaction, gameId, {
+      message: `${playerData.displayName} overwatered slot ${slotIndex + 1} for an immediate +2 flowers. Excess hydration may cause root rot during upkeep.`,
       playerId: playerSnap.id,
       type: "action"
     });
@@ -605,7 +664,7 @@ export async function compostWitheredTx(gameId: string, uid: string, slotIndex: 
     const seedsGained = 1 + seedBonus;
     const flowersGained = 1 + flowerBonus;
 
-    nextSlots[slotIndex] = { state: "empty", plantId: null };
+    nextSlots[slotIndex] = { state: "empty", plantId: null, water: 0 };
 
     transaction.update(playerDocRef(gameId, playerSnap.id), {
       gardenSlots: nextSlots,
