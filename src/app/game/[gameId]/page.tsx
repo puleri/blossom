@@ -303,7 +303,7 @@ export default function GamePage({ params }: GamePageProps) {
 
       {game.phase === "turns" ? (
         <>
-          <p>Turns phase is in progress. Upkeep now generates buds first; buds can be harvested now (safe, lower yield) or held to force bloom into flowers later (higher upside, but exposed to risks/events).</p>
+          <p>Turns phase is in progress. Upkeep now generates buds first; buds can be harvested now (safe, lower yield) or held to force bloom into flowers later (higher upside, but exposed to risks/events). Bugs now reduce final score, so pest pressure is dangerous unless you clear or convert bugs.</p>
           {currentEvent ? (
             <p>
               Round event in play: <strong>{currentEvent.name}</strong> — {currentEvent.description} (resolves at round end)
@@ -422,7 +422,7 @@ export default function GamePage({ params }: GamePageProps) {
                     actionsExhausted ||
                     !currentPlayer.gardenSlots.some((slot) => slot.state === "withered")
                   }
-                  title="Risky: consume a withered slot for growth resources, but compost can attract bugs."
+                  title="Risky: consume a withered slot for growth resources, but compost can attract bugs that now reduce score unless countered."
                 >
                   {busyAction === "compost" ? "Composting..." : "Compost withered slot (risky)"}
                 </button>
@@ -435,7 +435,7 @@ export default function GamePage({ params }: GamePageProps) {
                     })
                   }
                   disabled={Boolean(busyAction) || actionsExhausted || currentPlayer.resources.water < 2}
-                  title="Risky: spend 2 water and roll for flowers; low rolls add bugs."
+                  title="Risky: spend 2 water and roll for flowers; low rolls add bugs that reduce score."
                 >
                   {busyAction === "gamble-bloom" ? "Gambling..." : "Gamble bloom (risky)"}
                 </button>
@@ -461,7 +461,7 @@ export default function GamePage({ params }: GamePageProps) {
                     })
                   }
                   disabled={Boolean(busyAction) || actionsExhausted || currentPlayer.resources.buds < 1}
-                  title="Risky: convert buds into flowers, but may lose water, gain bugs, or fail a wither check."
+                  title="Risky: convert buds into flowers, but may lose water, gain bugs, or fail a wither check. Bug counterplay includes Ladybugs, Venus Flytrap, and Pitcher Plant."
                 >
                   {busyAction === "force-bloom" ? "Forcing bloom..." : "Force bloom (risky hold payoff)"}
                 </button>

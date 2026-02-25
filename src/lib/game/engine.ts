@@ -216,5 +216,6 @@ export function forceBloom(player: PlayerDoc): PlayerDoc {
 
 export function computePlayerScore(player: PlayerDoc): number {
   const tableauPlantPoints = computeTableauPlantPoints(player);
-  return tableauPlantPoints + player.resources.flowers + player.resources.bugs;
+  const bugPenalty = Math.min(player.resources.bugs, 6);
+  return tableauPlantPoints + player.resources.flowers - bugPenalty;
 }

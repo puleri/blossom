@@ -10,8 +10,8 @@ const ABILITY_DESCRIPTION_MAP: Record<string, string> = {
   companion_planting_passive: "Passive: improves neighboring plants when planted together.",
   bloom_prestige_round_end: "Round end: scores extra prestige from blooms.",
   nectar_economy_round_end: "Round end: converts nectar production into bonus points.",
-  infestation_proof_event: "Event reaction: ignores infestation penalties.",
-  shared_hunt_round_end: "Round end: captures pests and shares the benefit.",
+  infestation_proof_event: "Event reaction: blocks pest events and gains 1 seed.",
+  shared_hunt_round_end: "Round end: converts up to 2 bugs into flowers and gains 1 seed.",
   spreading_runner_round_end: "Round end: spreads runners to expand presence.",
   spread_enters_with_zero_water: "Spreads start dry and must be watered to grow."
 };

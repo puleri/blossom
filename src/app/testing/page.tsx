@@ -12,9 +12,11 @@ import { drawFromDeck, revealNextEvent } from "@/lib/game/decks";
 import {
   applyAdjacentPairBonuses,
   applyEventToPlayers,
+  applyEventToPlayersWithReactions,
   applyPlantDecayAndDeaths,
   collectBudTokens,
-  computePlayerScore
+  computePlayerScore,
+  resolveRoundEndUpkeepStartAbilities
 } from "@/lib/game/engine";
 import { GAME_TEST_DATA } from "@/lib/testing/gameTestData";
 
@@ -275,6 +277,66 @@ export default function TestingPage() {
     });
   }
 
+
+  const pestBalanceSnapshots = useMemo(() => {
+    const baseline = {
+      ...GAME_TEST_DATA.players[0],
+      resources: { ...GAME_TEST_DATA.players[0].resources, flowers: 3, bugs: 2 }
+    };
+
+    const flytrapPlayer = {
+      ...GAME_TEST_DATA.players[0],
+      resources: { ...GAME_TEST_DATA.players[0].resources, seeds: 1, bugs: 1 },
+      gardenSlots: [
+        { state: "grown", plantId: "venus-flytrap", water: 2 },
+        { state: "empty", plantId: null, water: 0 },
+        { state: "empty", plantId: null, water: 0 },
+        { state: "empty", plantId: null, water: 0 },
+        { state: "empty", plantId: null, water: 0 }
+      ]
+    };
+
+    const pitcherPlayer = {
+      ...GAME_TEST_DATA.players[0],
+      resources: { ...GAME_TEST_DATA.players[0].resources, seeds: 1, flowers: 0, bugs: 3 },
+      gardenSlots: [
+        { state: "grown", plantId: "pitcher-plant", water: 2 },
+        { state: "empty", plantId: null, water: 0 },
+        { state: "empty", plantId: null, water: 0 },
+        { state: "empty", plantId: null, water: 0 },
+        { state: "empty", plantId: null, water: 0 }
+      ]
+    };
+
+    const infestation = EVENT_CARDS.find((event) => event.id === "infestation");
+    if (!infestation) return [];
+
+    const baselineAfterEvent = applyEventToPlayers([baseline], infestation)[0];
+    const flytrapAfterReaction = applyEventToPlayersWithReactions([flytrapPlayer], infestation).players[0];
+    const pitcherAfterHunt = resolveRoundEndUpkeepStartAbilities([pitcherPlayer])[0].player;
+
+    return [
+      {
+        label: "No pest counterplay",
+        before: baseline.resources,
+        after: baselineAfterEvent.resources,
+        scorePreview: computePlayerScore(baselineAfterEvent)
+      },
+      {
+        label: "Venus Flytrap reaction vs infestation",
+        before: flytrapPlayer.resources,
+        after: flytrapAfterReaction.resources,
+        scorePreview: computePlayerScore(flytrapAfterReaction)
+      },
+      {
+        label: "Pitcher Plant converts pests at round end",
+        before: pitcherPlayer.resources,
+        after: pitcherAfterHunt.resources,
+        scorePreview: computePlayerScore(pitcherAfterHunt)
+      }
+    ];
+  }, []);
+
   return (
     <main>
       <h1>Interactive Testing Page</h1>
@@ -288,6 +350,19 @@ export default function TestingPage() {
           Round event in play: <strong>{currentEvent.name}</strong> — {currentEvent.description}
         </p>
       ) : null}
+
+      <section>
+        <h2>Pest balance snapshots</h2>
+        <p>Representative board states for validating that bugs are a penalty unless countered by pest-synergy plants.</p>
+        <ul>
+          {pestBalanceSnapshots.map((snapshot) => (
+            <li key={snapshot.label}>
+              <strong>{snapshot.label}</strong>: before (Seeds {snapshot.before.seeds}, Flowers {snapshot.before.flowers}, Bugs {snapshot.before.bugs}) → after (Seeds {snapshot.after.seeds}, Flowers {snapshot.after.flowers}, Bugs {snapshot.after.bugs}), score preview {snapshot.scorePreview}.
+            </li>
+          ))}
+        </ul>
+      </section>
+
 
       {currentPlayer ? <HandPanel hand={currentPlayer.hand} /> : null}
       {currentPlayer ? <GardenTableau slots={currentPlayer.gardenSlots} /> : null}
