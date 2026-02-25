@@ -27,7 +27,23 @@ const ABILITY_DESCRIPTION_MAP: Record<string, string> = {
   bloom_transmutation_action_once_per_round:
     "Action (once per round): spend 1 flower token to gain 1 water and 1 seed.",
   unified_bloom_round_end: "Round end: if full, adjacent plants gain 1 water before flowering checks.",
-  grand_bloom_event_round_end: "Round end: if 4 or more plants flower, gain 3 flower tokens and 2 seeds."
+  grand_bloom_event_round_end: "Round end: if 4 or more plants flower, gain 3 flower tokens and 2 seeds.",
+  minimalist_game_end: "Game end: gain +1 point if this plant never held more than 1 water.",
+  scarcity_flower_round_end: "Round end: if this plant has exactly 1 water, gain 1 flower token.",
+  dry_resistance_event: "Event reaction: loses 1 less water during Dry Heat events (minimum 0).",
+  redistribution_round_end: "Round end: move 1 water from any plant to another plant in your garden.",
+  heat_thrives_event: "Event reaction: during Dry Heat, gain +2 seeds.",
+  oppressive_shade_round_end: "Round end: if this plant has 0 water and survives, gain 1 seed.",
+  low_water_colony_game_end: "Game end: gain +1 point if adjacent to another plant with 1 or less water.",
+  evaporation_pressure_round_end:
+    "Round end: if this plant has 0 water, each opponent full-water plant loses 1 water.",
+  false_spring_game_end: "Game end: gain +2 points if a Rainstorm event occurred this game.",
+  deep_roots_passive:
+    "Passive: may hold 1 overflow water above capacity; overflow is immune to event-based removal.",
+  bloom_through_ash_round_end:
+    "Round end: when flowering below half water, gain +2 flower tokens instead of 1.",
+  sovereign_of_scarcity_game_end:
+    "Game end: gain +1 point per plant at 1 or less water and +2 points per revealed Dry Heat event."
 };
 
 const PLANT_CARD_MAP = new Map(PLANT_CARDS.map((card) => [card.id, card]));

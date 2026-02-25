@@ -240,6 +240,126 @@ export const PLANT_CARDS: PlantCard[] = [
     decayPerRound: 1,
     requiresUpkeep: true,
     abilities: ["grand_bloom_event_round_end"]
+  },
+  {
+    id: "sandspire-cactus",
+    name: "Sandspire Cactus",
+    seedCost: 1,
+    points: 4,
+    waterCapacity: 2,
+    decayPerRound: 0,
+    requiresUpkeep: false,
+    abilities: ["minimalist_game_end"]
+  },
+  {
+    id: "dustbloom-succulent",
+    name: "Dustbloom Succulent",
+    seedCost: 2,
+    points: 6,
+    waterCapacity: 3,
+    decayPerRound: 0,
+    requiresUpkeep: false,
+    abilities: ["scarcity_flower_round_end"]
+  },
+  {
+    id: "thornbark-shrub",
+    name: "Thornbark Shrub",
+    seedCost: 2,
+    points: 5,
+    waterCapacity: 3,
+    decayPerRound: 1,
+    requiresUpkeep: false,
+    abilities: ["dry_resistance_event"]
+  },
+  {
+    id: "parched-root-network",
+    name: "Parched Root Network",
+    seedCost: 3,
+    points: 7,
+    waterCapacity: 4,
+    decayPerRound: 1,
+    requiresUpkeep: false,
+    abilities: ["redistribution_round_end"]
+  },
+  {
+    id: "sunscorch-agave",
+    name: "Sunscorch Agave",
+    seedCost: 3,
+    points: 8,
+    waterCapacity: 3,
+    decayPerRound: 0,
+    requiresUpkeep: false,
+    abilities: ["heat_thrives_event"]
+  },
+  {
+    id: "wither-sage",
+    name: "Wither Sage",
+    seedCost: 2,
+    points: 4,
+    waterCapacity: 2,
+    decayPerRound: 1,
+    requiresUpkeep: false,
+    abilities: ["oppressive_shade_round_end"]
+  },
+  {
+    id: "desert-mat-creeper",
+    name: "Desert Mat Creeper",
+    seedCost: 1,
+    points: 2,
+    waterCapacity: 1,
+    decayPerRound: 0,
+    requiresUpkeep: false,
+    abilities: ["low_water_colony_game_end"]
+  },
+  {
+    id: "scorchvine",
+    name: "Scorchvine",
+    seedCost: 2,
+    points: 6,
+    waterCapacity: 3,
+    decayPerRound: 1,
+    requiresUpkeep: false,
+    abilities: ["evaporation_pressure_round_end"]
+  },
+  {
+    id: "mirage-bloom",
+    name: "Mirage Bloom",
+    seedCost: 2,
+    points: 5,
+    waterCapacity: 2,
+    decayPerRound: 1,
+    requiresUpkeep: false,
+    abilities: ["false_spring_game_end"]
+  },
+  {
+    id: "ironwood-sapling",
+    name: "Ironwood Sapling",
+    seedCost: 3,
+    points: 9,
+    waterCapacity: 5,
+    decayPerRound: 1,
+    requiresUpkeep: false,
+    abilities: ["deep_roots_passive"]
+  },
+  {
+    id: "ashflower-bush",
+    name: "Ashflower Bush",
+    seedCost: 2,
+    points: 6,
+    waterCapacity: 2,
+    decayPerRound: 1,
+    requiresUpkeep: false,
+    abilities: ["bloom_through_ash_round_end"]
+  },
+  {
+    id: "dominion-baobab",
+    name: "Dominion Baobab",
+    seedCost: 4,
+    points: 12,
+    waterCapacity: 5,
+    decayPerRound: 1,
+    requiresUpkeep: false,
+    abilities: ["sovereign_of_scarcity_game_end"]
   }
 ];
 
