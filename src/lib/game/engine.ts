@@ -11,13 +11,16 @@ function clampResource(value: number) {
   return Math.max(0, value);
 }
 
+const HYDRATION_GROWTH_THRESHOLD = 2;
+const HYDRATION_BLOOM_THRESHOLD = 3;
+
 function normalizeGardenSlots(player: PlayerDoc): GardenSlot[] {
   return player.gardenSlots.map((slot, index) => {
     if (typeof slot === "string") {
-      return { state: slot as GardenSlotState, plantId: player.gardenPlantIds?.[index] ?? null };
+      return { state: slot as GardenSlotState, plantId: player.gardenPlantIds?.[index] ?? null, water: 0 };
     }
 
-    return { state: slot.state, plantId: slot.plantId ?? null };
+    return { state: slot.state, plantId: slot.plantId ?? null, water: Math.max(0, slot.water ?? 0) };
   });
 }
 
@@ -85,27 +88,56 @@ export function activatePlantAbilityForTurn(player: PlayerDoc, slotIndex: number
 export function applyPlantDecayAndDeaths(player: PlayerDoc): PlayerDoc {
   const nextSlots = normalizeGardenSlots(player).map((slot) => {
     if (slot.state === "empty" || slot.state === "withered") {
-      return { state: slot.state, plantId: null };
+      return { state: slot.state, plantId: null, water: 0 };
     }
 
     const card = slot.plantId ? getPlantCardById(slot.plantId) : null;
-    if (!card || !card.requiresUpkeep || card.decayPerRound <= 0) {
-      return slot;
+    if (!card) {
+      return { ...slot, water: clampResource(slot.water - 1) };
+    }
+
+    const slotWater = slot.water ?? 0;
+    const hasRootRot = slotWater > card.waterCapacity;
+    const upkeepDrain = Math.max(1, card.decayPerRound);
+    const remainingWater = clampResource(Math.min(slotWater, card.waterCapacity) - upkeepDrain);
+
+    if (hasRootRot) {
+      if (slot.state === "grown") {
+        return { state: "seedling", plantId: slot.plantId, water: remainingWater };
+      }
+
+      return { state: "withered", plantId: null, water: 0 };
+    }
+
+    if (!card.requiresUpkeep) {
+      return { ...slot, water: remainingWater };
+    }
+
+    if (slot.state === "seedling") {
+      if (slotWater >= HYDRATION_GROWTH_THRESHOLD) {
+        return { ...slot, state: "grown", water: remainingWater };
+      }
+
+      if (card.decayPerRound >= 2 && slotWater === 0) {
+        return { state: "withered", plantId: null, water: 0 };
+      }
+
+      return { ...slot, water: remainingWater };
     }
 
     if (slot.state === "grown") {
-      if (card.decayPerRound >= 2) {
-        return { state: "withered", plantId: null };
+      if (slotWater === 0 || (slotWater < HYDRATION_GROWTH_THRESHOLD && card.decayPerRound >= 2)) {
+        return { state: "withered", plantId: null, water: 0 };
       }
 
-      return { ...slot, state: "seedling" };
+      if (slotWater < HYDRATION_GROWTH_THRESHOLD) {
+        return { ...slot, state: "seedling", water: remainingWater };
+      }
+
+      return { ...slot, water: remainingWater };
     }
 
-    if (slot.state === "seedling" && card.decayPerRound >= 2) {
-      return { state: "withered", plantId: null };
-    }
-
-    return slot;
+    return { ...slot, water: remainingWater };
   });
 
   return { ...player, gardenSlots: nextSlots };
@@ -131,13 +163,15 @@ export function applyAdjacentPairBonuses(player: PlayerDoc): PlayerDoc {
 }
 
 export function collectBudTokens(player: PlayerDoc): PlayerDoc {
-  const grownCount = normalizeGardenSlots(player).filter((slot) => slot.state === "grown").length;
+  const slots = normalizeGardenSlots(player);
+  const grownCount = slots.filter((slot) => slot.state === "grown").length;
+  const bloomBonus = slots.filter((slot) => slot.state === "grown" && (slot.water ?? 0) >= HYDRATION_BLOOM_THRESHOLD).length;
 
   return {
     ...player,
     resources: {
       ...player.resources,
-      buds: player.resources.buds + grownCount
+      buds: player.resources.buds + grownCount + bloomBonus
     }
   };
 }
