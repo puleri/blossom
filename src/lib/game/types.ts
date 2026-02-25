@@ -49,6 +49,7 @@ export interface PlayerDoc {
   hand: string[];
   gardenSlots: GardenSlot[];
   gardenPlantIds?: Array<string | null>;
+  abilityUsage?: Record<string, number>;
   keptFromMulligan: boolean;
 }
 

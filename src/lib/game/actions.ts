@@ -16,14 +16,16 @@ import { EVENT_CARDS } from "@/lib/game/cards/events";
 import { PLANT_CARD_IDS } from "@/lib/game/cards/plants";
 import { drawFromDeck, drawSetupHands, revealNextEvent, shuffleFisherYates } from "@/lib/game/decks";
 import {
+  activatePlantAbilityForTurn,
   applyAdjacentPairBonuses,
-  applyEventToPlayers,
+  applyEventToPlayersWithReactions,
   applyPlantDecayAndDeaths,
   applyResourcePressureCaps,
   collectBudTokens,
   computePlayerScore,
   forceBloom,
-  harvestBudsForPoints
+  harvestBudsForPoints,
+  resolveRoundEndUpkeepStartAbilities
 } from "@/lib/game/engine";
 import { gameDocRef, gameLogColRef, playerDocRef, playersColRef } from "@/lib/game/refs";
 import type { GameDoc, GameLogEntryDoc, GardenSlot, GardenSlotState, PlayerDoc, ResourceKey } from "@/lib/game/types";
@@ -165,7 +167,8 @@ export async function createGameTx(hostDisplayName: string, uid: string) {
       score: 0,
       hand: [],
       gardenSlots: Array.from({ length: GARDEN_SLOT_DEFAULT }, () => ({ state: "empty", plantId: null })),
-      keptFromMulligan: false
+      keptFromMulligan: false,
+      abilityUsage: {}
     });
 
     appendLog(transaction, gameRef.id, { message: `${hostDisplayName} created the game.`, playerId: hostRef.id, type: "system" });
@@ -194,7 +197,8 @@ export async function joinGameTx(gameId: string, displayName: string, uid: strin
       score: 0,
       hand: [],
       gardenSlots: Array.from({ length: GARDEN_SLOT_DEFAULT }, () => ({ state: "empty", plantId: null })),
-      keptFromMulligan: false
+      keptFromMulligan: false,
+      abilityUsage: {}
     });
 
     appendLog(transaction, gameId, { message: `${displayName} joined the game.`, playerId: playerRef.id, type: "system" });
@@ -226,7 +230,8 @@ export async function startGameSetupTx(gameId: string, uid: string) {
       transaction.update(playerDocRef(gameId, player.id), {
         hand: hands[player.id] ?? [],
         resources: { ...SETUP_STARTING_RESOURCES },
-        keptFromMulligan: false
+        keptFromMulligan: false,
+        abilityUsage: {}
       });
     });
 
@@ -336,13 +341,25 @@ export async function resolveRoundEventTx(gameId: string, uid: string) {
     const { event, remainingDeck } = revealNextEvent(gameData.eventDeck);
     assert(event, "No events remaining in the event deck.");
 
-    const nextPlayers = applyEventToPlayers(
+    const eventResolution = applyEventToPlayersWithReactions(
       players.map((snapshot) => ({ id: snapshot.id, ...snapshot.data() })),
       event
     );
 
-    nextPlayers.forEach((player) => {
-      transaction.update(playerDocRef(gameId, player.id), { resources: player.resources, score: player.score });
+    eventResolution.logs.forEach(({ playerId, trigger }) => {
+      appendLog(transaction, gameId, {
+        message: `${getPlantDisplayName(trigger.plantId)} (slot ${trigger.slotIndex + 1}) ${trigger.message}`,
+        playerId,
+        type: "system"
+      });
+    });
+
+    eventResolution.players.forEach((player) => {
+      transaction.update(playerDocRef(gameId, player.id), {
+        resources: player.resources,
+        score: player.score,
+        abilityUsage: player.abilityUsage ?? {}
+      });
     });
 
     const activePlayerId = gameData.playerOrder[0] ?? players[0]?.id ?? null;
@@ -757,45 +774,23 @@ export async function activatePlantAbilityTx(gameId: string, uid: string, slotIn
 
     const playerData = playerSnap.data();
     assert(slotIndex >= 0 && slotIndex < playerData.gardenSlots.length, "Invalid garden slot.");
-    const gardenSlots = normalizeGardenSlots(playerData);
-    assert(gardenSlots[slotIndex].state === "grown", "Only grown plants can activate abilities.");
-    const plantId = gardenSlots[slotIndex].plantId;
-    assert(plantId, "No plant found in selected slot.");
-    const plant = getPlantCardById(plantId);
-    assert(plant, "Plant card definition not found.");
 
-    const abilityWaterCost = 1;
-    const flowerGain = Math.max(1, Math.floor(plant.points / 4));
-
-    assert(playerData.resources.water >= abilityWaterCost, "Not enough water to activate ability.");
+    const resolved = activatePlantAbilityForTurn({ id: playerSnap.id, ...playerData }, slotIndex, gameData.round);
 
     transaction.update(playerDocRef(gameId, playerSnap.id), {
-      resources: {
-        ...playerData.resources,
-        water: playerData.resources.water - abilityWaterCost,
-        flowers: playerData.resources.flowers + flowerGain
-      }
+      resources: resolved.player.resources,
+      abilityUsage: resolved.player.abilityUsage ?? {},
+      gardenSlots: resolved.player.gardenSlots
     });
 
-    const remainingActions = getRemainingActions(gameData) - 1;
-    if (remainingActions <= 0) {
-      const nextTurn = resolveNextTurnState(gameData, players, playerSnap.id);
-      transaction.update(gameDocRef(gameId), nextTurn.nextState);
+    consumeTurnAction(transaction, gameId, gameData, players, playerSnap.id, playerData.displayName);
+
+    resolved.logs.forEach((triggerLog) => {
       appendLog(transaction, gameId, {
-        message: nextTurn.wrapped
-          ? `Round ${gameData.round} turns complete. Entering upkeep.`
-          : `${playerData.displayName} exhausted their actions. Turn auto-ended.`,
+        message: `${playerData.displayName} slot ${triggerLog.slotIndex + 1}: ${triggerLog.message}`,
         playerId: playerSnap.id,
         type: "action"
       });
-    } else {
-      transaction.update(gameDocRef(gameId), { remainingActions });
-    }
-
-    appendLog(transaction, gameId, {
-      message: `${playerData.displayName} activated ${plant.name}'s ability at slot ${slotIndex + 1} (+${flowerGain} flowers).`,
-      playerId: playerSnap.id,
-      type: "action"
     });
   });
 }
@@ -844,9 +839,21 @@ export async function resolveRoundUpkeepTx(gameId: string, uid: string) {
     assert(hostSnap, "Host player not found.");
     assert(hostSnap.data().uid === uid, "Only the host can resolve upkeep.");
 
-    const updatedPlayersAfterUpkeep = players.map((snapshot) => {
-      const basePlayer = { id: snapshot.id, ...snapshot.data() };
-      const afterDecay = applyPlantDecayAndDeaths(basePlayer);
+    const orderedPlayers = players.map((snapshot) => ({ id: snapshot.id, ...snapshot.data() }));
+    const roundEndResults = resolveRoundEndUpkeepStartAbilities(orderedPlayers);
+
+    roundEndResults.forEach((result) => {
+      result.logs.forEach((trigger) => {
+        appendLog(transaction, gameId, {
+          message: `${getPlantDisplayName(trigger.plantId)} (slot ${trigger.slotIndex + 1}) ${trigger.message}`,
+          playerId: result.player.id,
+          type: "system"
+        });
+      });
+    });
+
+    const updatedPlayersAfterUpkeep = roundEndResults.map((result) => {
+      const afterDecay = applyPlantDecayAndDeaths(result.player);
       const afterAdjacentBonuses = applyAdjacentPairBonuses(afterDecay);
       const afterBudCollection = collectBudTokens(afterAdjacentBonuses);
       const afterResourcePressure = applyResourcePressureCaps(afterBudCollection);
@@ -861,7 +868,19 @@ export async function resolveRoundUpkeepTx(gameId: string, uid: string) {
     });
 
     const currentEvent = EVENT_CARDS.find((event) => event.id === gameData.currentEventId) ?? null;
-    const updatedPlayers = currentEvent ? applyEventToPlayers(updatedPlayersAfterUpkeep, currentEvent) : updatedPlayersAfterUpkeep;
+    const eventResolution = currentEvent
+      ? applyEventToPlayersWithReactions(updatedPlayersAfterUpkeep, currentEvent)
+      : { players: updatedPlayersAfterUpkeep, logs: [] };
+
+    eventResolution.logs.forEach(({ playerId, trigger }) => {
+      appendLog(transaction, gameId, {
+        message: `${getPlantDisplayName(trigger.plantId)} (slot ${trigger.slotIndex + 1}) ${trigger.message}`,
+        playerId,
+        type: "system"
+      });
+    });
+
+    const updatedPlayers = eventResolution.players;
 
     const nextRound = gameData.round + 1;
     const isGameOver = nextRound > gameData.roundsTotal;
@@ -870,7 +889,8 @@ export async function resolveRoundUpkeepTx(gameId: string, uid: string) {
       transaction.update(playerDocRef(gameId, player.id), {
         gardenSlots: player.gardenSlots,
         resources: player.resources,
-        score: isGameOver ? computePlayerScore(player) : player.score
+        score: isGameOver ? computePlayerScore(player) : player.score,
+        abilityUsage: player.abilityUsage ?? {}
       });
     });
 

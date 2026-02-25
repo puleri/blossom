@@ -62,7 +62,8 @@ export async function createGame(hostDisplayName: string, uid?: string | null) {
     score: 0,
     hand: [],
     gardenSlots: Array.from({ length: GARDEN_SLOT_DEFAULT }, () => ({ state: "empty", plantId: null })),
-    keptFromMulligan: false
+    keptFromMulligan: false,
+    abilityUsage: {}
   };
 
   await setDoc(gameRef, gameDoc);
@@ -96,7 +97,8 @@ export async function joinGame(gameId: string, displayName: string, uid?: string
     score: 0,
     hand: [],
     gardenSlots: Array.from({ length: GARDEN_SLOT_DEFAULT }, () => ({ state: "empty", plantId: null })),
-    keptFromMulligan: false
+    keptFromMulligan: false,
+    abilityUsage: {}
   };
 
   await setDoc(playerRef, playerDoc);
@@ -197,7 +199,8 @@ export async function startGameFromLobby(gameId: string, playerId: string, uid?:
       updateDoc(snapshot.ref, {
         hand: hands[snapshot.id] ?? [],
         resources: { ...SETUP_STARTING_RESOURCES },
-        keptFromMulligan: false
+        keptFromMulligan: false,
+        abilityUsage: {}
       })
     )
   );
