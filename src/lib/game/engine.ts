@@ -14,6 +14,22 @@ function clampResource(value: number) {
 const HYDRATION_GROWTH_THRESHOLD = 2;
 const HYDRATION_BLOOM_THRESHOLD = 3;
 
+
+const CARNIVOROUS_PLANT_IDS = new Set([
+  "venus-flytrap",
+  "pitcher-plant",
+  "sundew-cluster",
+  "cobra-lily",
+  "bladderwort",
+  "thornmaw-bramble",
+  "sporefang-vine",
+  "gloomtrap-shrub",
+  "mawroot-bulb",
+  "carrion-bloom",
+  "razorleaf-net",
+  "apex-devourer"
+]);
+
 function normalizeGardenSlots(player: PlayerDoc): GardenSlot[] {
   return player.gardenSlots.map((slot, index) => {
     if (typeof slot === "string") {
@@ -217,5 +233,16 @@ export function forceBloom(player: PlayerDoc): PlayerDoc {
 export function computePlayerScore(player: PlayerDoc): number {
   const tableauPlantPoints = computeTableauPlantPoints(player);
   const bugPenalty = Math.min(player.resources.bugs, 6);
-  return tableauPlantPoints + player.resources.flowers - bugPenalty;
+  const slots = normalizeGardenSlots(player);
+  const carnivorousCount = slots.reduce((count, slot) => {
+    if (slot.state !== "grown" || !slot.plantId) {
+      return count;
+    }
+
+    return count + (CARNIVOROUS_PLANT_IDS.has(slot.plantId) ? 1 : 0);
+  }, 0);
+  const hasApexDevourer = slots.some((slot) => slot.state === "grown" && slot.plantId === "apex-devourer");
+  const apexBonus = hasApexDevourer ? player.resources.bugs + carnivorousCount * 2 : 0;
+
+  return tableauPlantPoints + player.resources.flowers - bugPenalty + apexBonus;
 }
