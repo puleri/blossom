@@ -28,7 +28,7 @@ import {
   resolveRoundEndUpkeepStartAbilities
 } from "@/lib/game/engine";
 import { gameDocRef, gameLogColRef, playerDocRef, playersColRef } from "@/lib/game/refs";
-import type { GameDoc, GameLogEntryDoc, GardenSlot, GardenSlotState, PlayerDoc, ResourceKey } from "@/lib/game/types";
+import type { EventCard, EventForecast, GameDoc, GameLogEntryDoc, GardenSlot, GardenSlotState, PlayerDoc, ResourceKey, UpkeepEventResponse } from "@/lib/game/types";
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message);
@@ -101,6 +101,48 @@ function getCurrentEvent(game: Omit<GameDoc, "id">) {
   return EVENT_CARDS.find((event) => event.id === game.currentEventId) ?? null;
 }
 
+function buildForecast(event: EventCard | null): EventForecast | null {
+  if (!event) {
+    return null;
+  }
+
+  return {
+    eventId: event.id,
+    effectType: event.effectType,
+    tags: event.tags,
+    polarity: event.value >= 0 ? "positive" : "negative"
+  };
+}
+
+function applyEventValueModifier(baseValue: number, response: UpkeepEventResponse | undefined) {
+  if (!response || response.choice === "none" || baseValue === 0) {
+    return baseValue;
+  }
+
+  const direction = baseValue > 0 ? 1 : -1;
+  const magnitude = Math.abs(baseValue);
+
+  if (response.choice === "amplify") {
+    return baseValue + direction;
+  }
+
+  return direction * Math.max(0, magnitude - 1);
+}
+
+function applyEventToSinglePlayer(player: PlayerDoc, event: EventCard, value: number): PlayerDoc {
+  if (event.effectType === "points") {
+    return { ...player, score: Math.max(0, player.score + value) };
+  }
+
+  return {
+    ...player,
+    resources: {
+      ...player.resources,
+      [event.effectType]: Math.max(0, player.resources[event.effectType] + value)
+    }
+  };
+}
+
 function applyBloomWitherCheck(gardenSlots: GardenSlot[]): { gardenSlots: GardenSlot[]; withered: boolean } {
   const grownIndices = gardenSlots
     .map((slot, index) => ({ slot, index }))
@@ -129,7 +171,7 @@ function resolveNextTurnState(game: Omit<GameDoc, "id">, players: QueryDocumentS
   return {
     wrapped,
     nextState: wrapped
-      ? { phase: "upkeep" as const, activePlayerId: null, turnIndex: 0, remainingActions: ACTIONS_PER_TURN }
+      ? { phase: "upkeep" as const, activePlayerId: null, turnIndex: 0, remainingActions: ACTIONS_PER_TURN, upkeepEventResponses: {} }
       : { activePlayerId: order[nextIndex], turnIndex: nextIndex, remainingActions: ACTIONS_PER_TURN }
   };
 }
@@ -155,6 +197,8 @@ export async function createGameTx(hostDisplayName: string, uid: string) {
       eventDeck: shuffleFisherYates(EVENT_CARDS),
       plantDeck: [],
       currentEventId: null,
+      nextEventForecast: null,
+      upkeepEventResponses: {},
       lastPhaseResolvedRound: null
     });
 
@@ -245,6 +289,8 @@ export async function startGameSetupTx(gameId: string, uid: string) {
       remainingActions: ACTIONS_PER_TURN,
       plantDeck: remainingDeck,
       currentEventId: null,
+      nextEventForecast: null,
+      upkeepEventResponses: {},
       lastPhaseResolvedRound: null
     });
 
@@ -315,65 +361,20 @@ export async function submitSetupKeepTx(
         turnIndex: 0,
         remainingActions: ACTIONS_PER_TURN,
         eventDeck: remainingDeck,
-        currentEventId: event.id
+        currentEventId: event.id,
+        nextEventForecast: buildForecast(remainingDeck[0] ?? null),
+        upkeepEventResponses: {}
       });
       appendLog(transaction, gameId, { message: `Round 1 event drawn: ${event.name}. It resolves at round end.`, type: "system" });
+      appendLog(
+        transaction,
+        gameId,
+        {
+          message: `Forecast for round 2: ${(remainingDeck[0]?.tags ?? []).join(", ")} ${remainingDeck[0]?.effectType ?? "unknown"} trend (${(remainingDeck[0]?.value ?? 0) >= 0 ? "positive" : "negative"}), exact strength unknown.`,
+          type: "system"
+        }
+      );
     }
-  });
-}
-
-export async function resolveRoundEventTx(gameId: string, uid: string) {
-  const players = await getOrderedPlayers(gameId);
-
-  return runTransaction(firestore, async (transaction) => {
-    const gameRef = gameDocRef(gameId);
-    const gameSnap = await transaction.get(gameRef);
-    assert(gameSnap.exists(), "Game not found.");
-
-    const gameData = gameSnap.data();
-    assert(gameData.phase === "event", "Round event can only be resolved during event phase.");
-    assert(players.length > 0, "No players found.");
-
-    const hostSnap = players.find((snapshot) => snapshot.id === gameData.hostPlayerId);
-    assert(hostSnap, "Host player not found.");
-    assert(hostSnap.data().uid === uid, "Only the host can resolve the round event.");
-
-    const { event, remainingDeck } = revealNextEvent(gameData.eventDeck);
-    assert(event, "No events remaining in the event deck.");
-
-    const eventResolution = applyEventToPlayersWithReactions(
-      players.map((snapshot) => ({ id: snapshot.id, ...snapshot.data() })),
-      event
-    );
-
-    eventResolution.logs.forEach(({ playerId, trigger }) => {
-      appendLog(transaction, gameId, {
-        message: `${getPlantDisplayName(trigger.plantId)} (slot ${trigger.slotIndex + 1}) ${trigger.message}`,
-        playerId,
-        type: "system"
-      });
-    });
-
-    eventResolution.players.forEach((player) => {
-      transaction.update(playerDocRef(gameId, player.id), {
-        resources: player.resources,
-        score: player.score,
-        abilityUsage: player.abilityUsage ?? {}
-      });
-    });
-
-    const activePlayerId = gameData.playerOrder[0] ?? players[0]?.id ?? null;
-
-    transaction.update(gameRef, {
-      phase: "turns",
-      activePlayerId,
-      turnIndex: 0,
-      remainingActions: ACTIONS_PER_TURN,
-      eventDeck: remainingDeck,
-      currentEventId: event.id
-    });
-
-    appendLog(transaction, gameId, { message: `Round ${gameData.round} event: ${event.name}.`, type: "system" });
   });
 }
 
@@ -881,6 +882,61 @@ export async function advanceTurnOrRoundTx(gameId: string, uid: string) {
   });
 }
 
+export async function submitUpkeepEventResponseTx(
+  gameId: string,
+  uid: string,
+  choice: "mitigate" | "amplify" | "none",
+  spentResource: "water" | "seeds" = "water"
+) {
+  const players = await getOrderedPlayers(gameId);
+
+  return runTransaction(firestore, async (transaction) => {
+    const gameRef = gameDocRef(gameId);
+    const gameSnap = await transaction.get(gameRef);
+    assert(gameSnap.exists(), "Game not found.");
+
+    const gameData = gameSnap.data();
+    assert(gameData.phase === "upkeep", "Event responses can only be submitted during upkeep.");
+
+    const playerSnap = getPlayerByUid(players, uid);
+    const playerData = playerSnap.data();
+
+    const existingResponses = gameData.upkeepEventResponses ?? {};
+    assert(!existingResponses[playerSnap.id], "You already submitted an upkeep response.");
+
+    if (choice !== "none") {
+      assert(playerData.resources[spentResource] >= 1, `Not enough ${spentResource} to submit this response.`);
+      transaction.update(playerDocRef(gameId, playerSnap.id), {
+        resources: {
+          ...playerData.resources,
+          [spentResource]: playerData.resources[spentResource] - 1
+        }
+      });
+    }
+
+    const response: UpkeepEventResponse = {
+      choice,
+      spentResource: choice === "none" ? null : spentResource
+    };
+
+    transaction.update(gameRef, {
+      upkeepEventResponses: {
+        ...existingResponses,
+        [playerSnap.id]: response
+      }
+    });
+
+    appendLog(transaction, gameId, {
+      message:
+        choice === "none"
+          ? `${playerData.displayName} chose not to respond before upkeep event resolution.`
+          : `${playerData.displayName} chose to ${choice} the event by spending 1 ${spentResource}.`,
+      playerId: playerSnap.id,
+      type: "action"
+    });
+  });
+}
+
 export async function resolveRoundUpkeepTx(gameId: string, uid: string) {
   const players = await getOrderedPlayers(gameId);
 
@@ -927,6 +983,8 @@ export async function resolveRoundUpkeepTx(gameId: string, uid: string) {
     });
 
     const currentEvent = EVENT_CARDS.find((event) => event.id === gameData.currentEventId) ?? null;
+    const eventResponses = gameData.upkeepEventResponses ?? {};
+
     const eventResolution = currentEvent
       ? applyEventToPlayersWithReactions(updatedPlayersAfterUpkeep, currentEvent)
       : { players: updatedPlayersAfterUpkeep, logs: [] };
@@ -939,7 +997,14 @@ export async function resolveRoundUpkeepTx(gameId: string, uid: string) {
       });
     });
 
-    const updatedPlayers = eventResolution.players;
+    const updatedPlayers = currentEvent
+      ? eventResolution.players.map((player) => {
+          const response = eventResponses[player.id];
+          const adjustedValue = applyEventValueModifier(currentEvent.value, response);
+
+          return applyEventToSinglePlayer(player, currentEvent, adjustedValue);
+        })
+      : eventResolution.players;
 
     const nextRound = gameData.round + 1;
     const isGameOver = nextRound > gameData.roundsTotal;
@@ -960,6 +1025,7 @@ export async function resolveRoundUpkeepTx(gameId: string, uid: string) {
       turnIndex: 0,
       remainingActions: ACTIONS_PER_TURN,
       round: isGameOver ? gameData.round : nextRound,
+      upkeepEventResponses: {},
       lastPhaseResolvedRound: gameData.round
     });
 
@@ -968,9 +1034,21 @@ export async function resolveRoundUpkeepTx(gameId: string, uid: string) {
       assert(event, "No events remaining in the event deck.");
       transaction.update(gameRef, {
         eventDeck: remainingDeck,
-        currentEventId: event.id
+        currentEventId: event.id,
+        nextEventForecast: buildForecast(remainingDeck[0] ?? null)
       });
       appendLog(transaction, gameId, { message: `Round ${nextRound} event drawn: ${event.name}. It resolves at round end.`, type: "system" });
+      const nextForecast = buildForecast(remainingDeck[0] ?? null);
+      if (nextForecast) {
+        appendLog(
+          transaction,
+          gameId,
+          {
+            message: `Forecast for round ${nextRound + 1}: tags ${nextForecast.tags.join(", ")}, ${nextForecast.effectType} trend (${nextForecast.polarity}), exact strength unknown.`,
+            type: "system"
+          }
+        );
+      }
     }
 
     appendLog(transaction, gameId, {

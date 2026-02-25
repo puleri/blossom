@@ -1,6 +1,6 @@
 export type GameStatus = "lobby" | "in_progress" | "ended";
 
-export type Phase = "lobby" | "setup" | "event" | "turns" | "upkeep" | "ended";
+export type Phase = "lobby" | "setup" | "turns" | "upkeep" | "ended";
 
 export type GardenSlotState = "empty" | "seedling" | "grown" | "withered";
 
@@ -31,12 +31,27 @@ export interface PlantCard {
   abilities: string[];
 }
 
+export type EventTag = "weather" | "pest" | "pollination";
+
 export interface EventCard {
   id: string;
   name: string;
   description: string;
   effectType: ResourceKey | "points";
   value: number;
+  tags: EventTag[];
+}
+
+export interface EventForecast {
+  eventId: string;
+  effectType: EventCard["effectType"];
+  tags: EventTag[];
+  polarity: "positive" | "negative";
+}
+
+export interface UpkeepEventResponse {
+  choice: "mitigate" | "amplify" | "none";
+  spentResource: "water" | "seeds" | null;
 }
 
 export interface PlayerDoc {
@@ -71,6 +86,8 @@ export interface GameDoc {
   plantDeck: string[];
   lastPhaseResolvedRound: number | null;
   currentEventId: string | null;
+  nextEventForecast?: EventForecast | null;
+  upkeepEventResponses?: Record<string, UpkeepEventResponse>;
   log?: string[];
 }
 

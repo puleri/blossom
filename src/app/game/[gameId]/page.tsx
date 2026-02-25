@@ -18,6 +18,7 @@ import {
   passTurnTx,
   resolveRoundUpkeepTx,
   sowPlantTx,
+  submitUpkeepEventResponseTx,
   submitSetupKeepTx,
   tradeWaterForSeedsTx
 } from "@/lib/game/actions";
@@ -48,6 +49,8 @@ export default function GamePage({ params }: GamePageProps) {
   const [selectedPlantId, setSelectedPlantId] = useState<string>("");
   const [selectedSlot, setSelectedSlot] = useState<number>(0);
   const [selectedWitheredSlot, setSelectedWitheredSlot] = useState<number>(0);
+  const [upkeepResponseChoice, setUpkeepResponseChoice] = useState<"mitigate" | "amplify" | "none">("none");
+  const [upkeepResponseResource, setUpkeepResponseResource] = useState<"water" | "seeds">("water");
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const loading = gameLoading || playersLoading || meLoading;
 
@@ -196,7 +199,9 @@ export default function GamePage({ params }: GamePageProps) {
 
   const currentPlant = getPlantCardById(selectedPlantId);
   const currentEvent = EVENT_CARDS.find((event) => event.id === game.currentEventId) ?? null;
+  const nextEventForecast = game.nextEventForecast ?? null;
   const isHost = Boolean(me?.id && me.id === game.hostPlayerId);
+  const myUpkeepResponse = me?.id ? game.upkeepEventResponses?.[me.id] : null;
 
   return (
     <main>
@@ -214,6 +219,13 @@ export default function GamePage({ params }: GamePageProps) {
       </div>
 
       {error ? <p style={{ color: "crimson" }}>{error}</p> : null}
+
+      {nextEventForecast ? (
+        <p>
+          Forecast (next round): <strong>{nextEventForecast.tags.join(", ")}</strong> pressure on
+          <strong> {nextEventForecast.effectType}</strong> ({nextEventForecast.polarity}). Exact value remains hidden.
+        </p>
+      ) : null}
 
       {game.phase === "lobby" ? (
         <>
@@ -476,13 +488,54 @@ export default function GamePage({ params }: GamePageProps) {
       
       {game.phase === "upkeep" ? (
         <>
-          <p>Upkeep phase: waiting for host resolution.</p>
+          <p>Upkeep phase: response window first, then host resolves upkeep + event.</p>
           {currentEvent ? (
             <p>
-              Event waiting to resolve: <strong>{currentEvent.name}</strong> — {currentEvent.description}
+              Event waiting to resolve: <strong>{currentEvent.name}</strong> — {currentEvent.description} [tags: {currentEvent.tags.join(", ")}]
             </p>
           ) : null}
           <PlayerList players={players} activePlayerId={game.activePlayerId} />
+          {currentPlayer ? (
+            <section>
+              <h3>Pre-upkeep event response</h3>
+              {myUpkeepResponse ? (
+                <p>
+                  You already chose: <strong>{myUpkeepResponse.choice}</strong>
+                  {myUpkeepResponse.spentResource ? ` (spent 1 ${myUpkeepResponse.spentResource})` : ""}.
+                </p>
+              ) : (
+                <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                  <label>
+                    Choice
+                    <select value={upkeepResponseChoice} onChange={(event) => setUpkeepResponseChoice(event.target.value as "mitigate" | "amplify" | "none")}>
+                      <option value="none">No response</option>
+                      <option value="mitigate">Mitigate event impact</option>
+                      <option value="amplify">Amplify event impact</option>
+                    </select>
+                  </label>
+                  <label>
+                    Resource
+                    <select value={upkeepResponseResource} onChange={(event) => setUpkeepResponseResource(event.target.value as "water" | "seeds")} disabled={upkeepResponseChoice === "none"}>
+                      <option value="water">Water</option>
+                      <option value="seeds">Seeds</option>
+                    </select>
+                  </label>
+                  <button
+                    onClick={() =>
+                      runAction("upkeep-response", async () => {
+                        if (!user?.uid) throw new Error("Missing authenticated user id.");
+                        await submitUpkeepEventResponseTx(gameId, user.uid, upkeepResponseChoice, upkeepResponseResource);
+                      })
+                    }
+                    disabled={Boolean(busyAction)}
+                  >
+                    {busyAction === "upkeep-response" ? "Submitting..." : "Submit response"}
+                  </button>
+                </div>
+              )}
+            </section>
+          ) : null}
+
           {isHost ? (
             <button
               onClick={() =>
