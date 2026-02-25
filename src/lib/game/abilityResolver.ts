@@ -104,6 +104,46 @@ function markAbilityUsed(player: PlayerDoc, round: number, slotIndex: number, ab
   };
 }
 
+
+function getGrownPlantCard(slots: GardenSlot[], slotIndex: number) {
+  const slot = slots[slotIndex];
+  if (!slot || slot.state !== "grown" || !slot.plantId) {
+    return null;
+  }
+
+  return getPlantCardById(slot.plantId);
+}
+
+function hasBloomkeeperAdjacency(slots: GardenSlot[], slotIndex: number) {
+  return [slotIndex - 1, slotIndex + 1].some((adjacentIndex) => {
+    const adjacentCard = getGrownPlantCard(slots, adjacentIndex);
+    return adjacentCard?.abilities.includes("shared_radiance_passive") ?? false;
+  });
+}
+
+function getFloweringThreshold(slots: GardenSlot[], slotIndex: number) {
+  const card = getGrownPlantCard(slots, slotIndex);
+  if (!card) {
+    return Number.POSITIVE_INFINITY;
+  }
+
+  const thresholdReduction = hasBloomkeeperAdjacency(slots, slotIndex) ? 1 : 0;
+  return Math.max(1, card.waterCapacity - thresholdReduction);
+}
+
+function isPlantFlowering(slots: GardenSlot[], slotIndex: number) {
+  const slot = slots[slotIndex];
+  if (!slot || slot.state !== "grown") {
+    return false;
+  }
+
+  return (slot.water ?? 0) >= getFloweringThreshold(slots, slotIndex);
+}
+
+function countFloweringPlants(slots: GardenSlot[]) {
+  return slots.reduce((count, _, slotIndex) => count + (isPlantFlowering(slots, slotIndex) ? 1 : 0), 0);
+}
+
 const ROUND_END_RESOLVERS: Record<string, (context: RoundEndAbilityResolverContext) => AbilityResolutionResult> = {
   trellis_chain_round_end: ({ ability, player }) => {
     const slots = normalizeGardenSlots(player);
@@ -196,6 +236,279 @@ const ROUND_END_RESOLVERS: Record<string, (context: RoundEndAbilityResolverConte
         }
       ]
     };
+  },
+  modest_bloom_round_end: ({ ability, player }) => {
+    const slots = normalizeGardenSlots(player);
+    const flowered = isPlantFlowering(slots, ability.slotIndex);
+
+    return {
+      player: {
+        ...player,
+        resources: {
+          ...player.resources,
+          flowers: player.resources.flowers + (flowered ? 1 : 0)
+        }
+      },
+      logs: [
+        {
+          abilityId: ability.abilityId,
+          plantId: ability.plantId,
+          slotIndex: ability.slotIndex,
+          message: flowered
+            ? `Triggered ${ability.abilityId}: bloomed at full hydration and gained 1 flower.`
+            : `Triggered ${ability.abilityId}: not fully hydrated, no flower gained.`
+        }
+      ]
+    };
+  },
+  fertile_bloom_round_end: ({ ability, player }) => {
+    const slots = normalizeGardenSlots(player);
+    const flowered = isPlantFlowering(slots, ability.slotIndex);
+
+    return {
+      player: {
+        ...player,
+        resources: {
+          ...player.resources,
+          seeds: player.resources.seeds + (flowered ? 1 : 0)
+        }
+      },
+      logs: [
+        {
+          abilityId: ability.abilityId,
+          plantId: ability.plantId,
+          slotIndex: ability.slotIndex,
+          message: flowered
+            ? `Triggered ${ability.abilityId}: flowered and produced 1 seed.`
+            : `Triggered ${ability.abilityId}: no flowering, no seed produced.`
+        }
+      ]
+    };
+  },
+  lunar_hydration_round_end: ({ ability, player }) => {
+    const slots = normalizeGardenSlots(player);
+    const flowered = isPlantFlowering(slots, ability.slotIndex);
+
+    return {
+      player: {
+        ...player,
+        resources: {
+          ...player.resources,
+          water: player.resources.water + (flowered ? 1 : 0)
+        }
+      },
+      logs: [
+        {
+          abilityId: ability.abilityId,
+          plantId: ability.plantId,
+          slotIndex: ability.slotIndex,
+          message: flowered
+            ? `Triggered ${ability.abilityId}: flowered and generated 1 water.`
+            : `Triggered ${ability.abilityId}: no flowering, no water generated.`
+        }
+      ]
+    };
+  },
+  royal_bloom_round_end: ({ ability, player }) => {
+    const slots = normalizeGardenSlots(player);
+    const flowered = isPlantFlowering(slots, ability.slotIndex);
+
+    return {
+      player: {
+        ...player,
+        resources: {
+          ...player.resources,
+          flowers: player.resources.flowers + (flowered ? 2 : 0)
+        }
+      },
+      logs: [
+        {
+          abilityId: ability.abilityId,
+          plantId: ability.plantId,
+          slotIndex: ability.slotIndex,
+          message: flowered
+            ? `Triggered ${ability.abilityId}: royal bloom gained 2 flowers.`
+            : `Triggered ${ability.abilityId}: not flowered, no bonus flowers.`
+        }
+      ]
+    };
+  },
+  seed_conversion_round_end: ({ ability, player }) => {
+    const canConvert = player.resources.flowers >= 2;
+
+    return {
+      player: {
+        ...player,
+        resources: {
+          ...player.resources,
+          flowers: clampResource(player.resources.flowers - (canConvert ? 2 : 0)),
+          seeds: player.resources.seeds + (canConvert ? 1 : 0)
+        }
+      },
+      logs: [
+        {
+          abilityId: ability.abilityId,
+          plantId: ability.plantId,
+          slotIndex: ability.slotIndex,
+          message: canConvert
+            ? `Triggered ${ability.abilityId}: converted 2 flowers into 1 seed.`
+            : `Triggered ${ability.abilityId}: not enough flowers to convert.`
+        }
+      ]
+    };
+  },
+  pollinator_surge_round_end: ({ ability, player }) => {
+    const slots = normalizeGardenSlots(player);
+    const floweringCount = countFloweringPlants(slots);
+    const bonusFlowers = floweringCount >= 2 ? 1 : 0;
+
+    return {
+      player: {
+        ...player,
+        resources: {
+          ...player.resources,
+          flowers: player.resources.flowers + bonusFlowers
+        }
+      },
+      logs: [
+        {
+          abilityId: ability.abilityId,
+          plantId: ability.plantId,
+          slotIndex: ability.slotIndex,
+          message:
+            bonusFlowers > 0
+              ? `Triggered ${ability.abilityId}: ${floweringCount} plants flowered, gained 1 bonus flower.`
+              : `Triggered ${ability.abilityId}: fewer than 2 plants flowered, no bonus flower.`
+        }
+      ]
+    };
+  },
+  chorus_effect_round_end: ({ ability, player }) => {
+    const slots = normalizeGardenSlots(player);
+    const floweringCount = countFloweringPlants(slots);
+    const bonusSeeds = floweringCount >= 3 ? 2 : 0;
+
+    return {
+      player: {
+        ...player,
+        resources: {
+          ...player.resources,
+          seeds: player.resources.seeds + bonusSeeds
+        }
+      },
+      logs: [
+        {
+          abilityId: ability.abilityId,
+          plantId: ability.plantId,
+          slotIndex: ability.slotIndex,
+          message:
+            bonusSeeds > 0
+              ? `Triggered ${ability.abilityId}: ${floweringCount} plants flowered, gained 2 seeds.`
+              : `Triggered ${ability.abilityId}: fewer than 3 plants flowered, no seeds gained.`
+        }
+      ]
+    };
+  },
+  crystal_bloom_round_end: ({ ability, player }) => {
+    const slots = normalizeGardenSlots(player);
+    const flowered = isPlantFlowering(slots, ability.slotIndex);
+
+    return {
+      player: {
+        ...player,
+        resources: {
+          ...player.resources,
+          flowers: player.resources.flowers + (flowered ? 1 : 0),
+          water: player.resources.water + (flowered ? 1 : 0)
+        }
+      },
+      logs: [
+        {
+          abilityId: ability.abilityId,
+          plantId: ability.plantId,
+          slotIndex: ability.slotIndex,
+          message: flowered
+            ? `Triggered ${ability.abilityId}: crystal bloom gained 1 flower and 1 water.`
+            : `Triggered ${ability.abilityId}: did not flower, no resources gained.`
+        }
+      ]
+    };
+  },
+  unified_bloom_round_end: ({ ability, player }) => {
+    const slots = normalizeGardenSlots(player);
+    const isFull = isPlantFlowering(slots, ability.slotIndex);
+    if (!isFull) {
+      return {
+        player,
+        logs: [
+          {
+            abilityId: ability.abilityId,
+            plantId: ability.plantId,
+            slotIndex: ability.slotIndex,
+            message: `Triggered ${ability.abilityId}: conductor not full, adjacent plants received no water.`
+          }
+        ]
+      };
+    }
+
+    const nextSlots = [...slots];
+    const affectedSlots: number[] = [];
+    [ability.slotIndex - 1, ability.slotIndex + 1].forEach((adjacentIndex) => {
+      const adjacent = nextSlots[adjacentIndex];
+      if (!adjacent || adjacent.state !== "grown") {
+        return;
+      }
+
+      affectedSlots.push(adjacentIndex + 1);
+      nextSlots[adjacentIndex] = {
+        ...adjacent,
+        water: (adjacent.water ?? 0) + 1
+      };
+    });
+
+    return {
+      player: {
+        ...player,
+        gardenSlots: nextSlots
+      },
+      logs: [
+        {
+          abilityId: ability.abilityId,
+          plantId: ability.plantId,
+          slotIndex: ability.slotIndex,
+          message:
+            affectedSlots.length > 0
+              ? `Triggered ${ability.abilityId}: granted +1 water to adjacent slot${affectedSlots.length > 1 ? "s" : ""} ${affectedSlots.join(", ")}.`
+              : `Triggered ${ability.abilityId}: no adjacent grown plants to receive water.`
+        }
+      ]
+    };
+  },
+  grand_bloom_event_round_end: ({ ability, player }) => {
+    const slots = normalizeGardenSlots(player);
+    const floweringCount = countFloweringPlants(slots);
+    const qualifies = floweringCount >= 4;
+
+    return {
+      player: {
+        ...player,
+        resources: {
+          ...player.resources,
+          flowers: player.resources.flowers + (qualifies ? 3 : 0),
+          seeds: player.resources.seeds + (qualifies ? 2 : 0)
+        }
+      },
+      logs: [
+        {
+          abilityId: ability.abilityId,
+          plantId: ability.plantId,
+          slotIndex: ability.slotIndex,
+          message: qualifies
+            ? `Triggered ${ability.abilityId}: ${floweringCount} plants flowered, gained 3 flowers and 2 seeds.`
+            : `Triggered ${ability.abilityId}: fewer than 4 plants flowered, no festival rewards.`
+        }
+      ]
+    };
   }
 };
 
@@ -271,6 +584,44 @@ const ACTIVATION_RESOLVERS: Record<string, (context: ActivationResolverContext) 
           plantId: ability.plantId,
           slotIndex: ability.slotIndex,
           message: `Activated ${ability.abilityId}: paid 1 seed, gained 2 water.`
+        }
+      ]
+    };
+  },
+  bloom_transmutation_action_once_per_round: ({ ability, player, round }) => {
+    const usageCount = getUsageCount(player, round, ability.slotIndex, ability.abilityId);
+    if (usageCount > 0) {
+      throw new Error("This plant ability was already activated this round.");
+    }
+
+    if (player.resources.flowers < 1) {
+      throw new Error("Not enough flowers to activate this plant ability.");
+    }
+
+    const nextPlayer = markAbilityUsed(
+      {
+        ...player,
+        resources: {
+          ...player.resources,
+          flowers: clampResource(player.resources.flowers - 1),
+          water: player.resources.water + 1,
+          seeds: player.resources.seeds + 1
+        }
+      },
+      round,
+      ability.slotIndex,
+      ability.abilityId
+    );
+
+    return {
+      player: nextPlayer,
+      consumedAbilityId: ability.abilityId,
+      logs: [
+        {
+          abilityId: ability.abilityId,
+          plantId: ability.plantId,
+          slotIndex: ability.slotIndex,
+          message: `Activated ${ability.abilityId}: spent 1 flower to gain 1 water and 1 seed.`
         }
       ]
     };

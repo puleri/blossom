@@ -120,6 +120,126 @@ export const PLANT_CARDS: PlantCard[] = [
     decayPerRound: 1,
     requiresUpkeep: true,
     abilities: ["spreading_runner_round_end", "spread_enters_with_zero_water"]
+  },
+  {
+    id: "sunpetal-daisy",
+    name: "Sunpetal Daisy",
+    seedCost: 1,
+    points: 3,
+    waterCapacity: 2,
+    decayPerRound: 1,
+    requiresUpkeep: true,
+    abilities: ["modest_bloom_round_end"]
+  },
+  {
+    id: "golden-marigold",
+    name: "Golden Marigold",
+    seedCost: 2,
+    points: 6,
+    waterCapacity: 3,
+    decayPerRound: 1,
+    requiresUpkeep: true,
+    abilities: ["fertile_bloom_round_end"]
+  },
+  {
+    id: "night-lantern-flower",
+    name: "Night Lantern Flower",
+    seedCost: 2,
+    points: 5,
+    waterCapacity: 3,
+    decayPerRound: 1,
+    requiresUpkeep: true,
+    abilities: ["lunar_hydration_round_end"]
+  },
+  {
+    id: "bloomkeeper-ivy",
+    name: "Bloomkeeper Ivy",
+    seedCost: 2,
+    points: 4,
+    waterCapacity: 2,
+    decayPerRound: 1,
+    requiresUpkeep: true,
+    abilities: ["shared_radiance_passive"]
+  },
+  {
+    id: "crowned-peony",
+    name: "Crowned Peony",
+    seedCost: 3,
+    points: 9,
+    waterCapacity: 4,
+    decayPerRound: 1,
+    requiresUpkeep: true,
+    abilities: ["royal_bloom_round_end"]
+  },
+  {
+    id: "petal-archivist",
+    name: "Petal Archivist",
+    seedCost: 2,
+    points: 3,
+    waterCapacity: 2,
+    decayPerRound: 1,
+    requiresUpkeep: true,
+    abilities: ["seed_conversion_round_end"]
+  },
+  {
+    id: "nectar-fountain",
+    name: "Nectar Fountain",
+    seedCost: 3,
+    points: 7,
+    waterCapacity: 4,
+    decayPerRound: 1,
+    requiresUpkeep: true,
+    abilities: ["pollinator_surge_round_end"]
+  },
+  {
+    id: "sun-choir-shrub",
+    name: "Sun Choir Shrub",
+    seedCost: 2,
+    points: 6,
+    waterCapacity: 3,
+    decayPerRound: 1,
+    requiresUpkeep: true,
+    abilities: ["chorus_effect_round_end"]
+  },
+  {
+    id: "dewglass-orchid",
+    name: "Dewglass Orchid",
+    seedCost: 3,
+    points: 10,
+    waterCapacity: 3,
+    decayPerRound: 2,
+    requiresUpkeep: true,
+    abilities: ["crystal_bloom_round_end"]
+  },
+  {
+    id: "petal-alchemist",
+    name: "Petal Alchemist",
+    seedCost: 2,
+    points: 4,
+    waterCapacity: 2,
+    decayPerRound: 1,
+    requiresUpkeep: true,
+    abilities: ["bloom_transmutation_action_once_per_round"]
+  },
+  {
+    id: "sunroot-conductor",
+    name: "Sunroot Conductor",
+    seedCost: 3,
+    points: 8,
+    waterCapacity: 4,
+    decayPerRound: 1,
+    requiresUpkeep: true,
+    abilities: ["unified_bloom_round_end"]
+  },
+  {
+    id: "verdant-festival-tree",
+    name: "Verdant Festival Tree",
+    seedCost: 4,
+    points: 12,
+    waterCapacity: 5,
+    decayPerRound: 1,
+    requiresUpkeep: true,
+    abilities: ["grand_bloom_event_round_end"]
   }
 ];
 
