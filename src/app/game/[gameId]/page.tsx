@@ -11,8 +11,10 @@ import { leaveGame, startGameFromLobby } from "@/lib/game/gameService";
 import {
   compostWitheredTx,
   drawPlantCardTx,
+  forceBloomTx,
   gambleBloomTx,
   goToWellTx,
+  harvestNowTx,
   passTurnTx,
   resolveRoundUpkeepTx,
   sowPlantTx,
@@ -289,7 +291,7 @@ export default function GamePage({ params }: GamePageProps) {
 
       {game.phase === "turns" ? (
         <>
-          <p>Turns phase is in progress. A sown plant stays a seed until it is watered, and seeds cannot wither. Each turn includes safe lines (well/draw/pass) and risky lines (trade/compost/gamble).</p>
+          <p>Turns phase is in progress. Upkeep now generates buds first; buds can be harvested now (safe, lower yield) or held to force bloom into flowers later (higher upside, but exposed to risks/events).</p>
           {currentEvent ? (
             <p>
               Round event in play: <strong>{currentEvent.name}</strong> — {currentEvent.description} (resolves at round end)
@@ -337,7 +339,7 @@ export default function GamePage({ params }: GamePageProps) {
               </label>
 
               {actionsExhausted ? <p>No actions left. Your turn will advance automatically.</p> : null}
-              {!actionsExhausted ? <p style={{ marginTop: 8 }}>Safe actions: Well, Draw, Pass. Risky actions: Trade Water for Seeds, Compost Withered, Gamble Bloom.</p> : null}
+              {!actionsExhausted ? <p style={{ marginTop: 8 }}>Safe actions: Well, Draw, Harvest Now, Pass. Risky actions: Trade Water for Seeds, Compost Withered, Gamble Bloom, Force Bloom.</p> : null}
 
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                 <button
@@ -428,6 +430,32 @@ export default function GamePage({ params }: GamePageProps) {
 
                 <button
                   onClick={() =>
+                    runAction("harvest-now", async () => {
+                      if (!user?.uid) throw new Error("Missing authenticated user id.");
+                      await harvestNowTx(gameId, user.uid);
+                    })
+                  }
+                  disabled={Boolean(busyAction) || actionsExhausted || currentPlayer.resources.buds < 1}
+                  title="Safe: convert buds directly into points now at lower efficiency."
+                >
+                  {busyAction === "harvest-now" ? "Harvesting..." : "Harvest buds now (safe)"}
+                </button>
+
+                <button
+                  onClick={() =>
+                    runAction("force-bloom", async () => {
+                      if (!user?.uid) throw new Error("Missing authenticated user id.");
+                      await forceBloomTx(gameId, user.uid);
+                    })
+                  }
+                  disabled={Boolean(busyAction) || actionsExhausted || currentPlayer.resources.buds < 1}
+                  title="Risky: convert buds into flowers, but may lose water, gain bugs, or fail a wither check."
+                >
+                  {busyAction === "force-bloom" ? "Forcing bloom..." : "Force bloom (risky hold payoff)"}
+                </button>
+
+                <button
+                  onClick={() =>
                     runAction("pass", async () => {
                       if (!user?.uid) throw new Error("Missing authenticated user id.");
                       await passTurnTx(gameId, user.uid);
@@ -435,7 +463,7 @@ export default function GamePage({ params }: GamePageProps) {
                   }
                   disabled={Boolean(busyAction) || actionsExhausted}
                 >
-                  {busyAction === "pass" ? "Passing..." : "Pass turn"}
+                  {busyAction === "pass" ? "Passing..." : "Pass turn / hold buds"}
                 </button>
               </div>
             </section>

@@ -11,6 +11,7 @@ export const ACTIONS_PER_TURN = 2;
 export const SETUP_STARTING_RESOURCES = {
   water: 3,
   seeds: 2,
+  buds: 0,
   flowers: 0,
   bugs: 0
 } as const;

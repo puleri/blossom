@@ -20,8 +20,10 @@ import {
   applyEventToPlayers,
   applyPlantDecayAndDeaths,
   applyResourcePressureCaps,
-  collectFlowerTokens,
-  computePlayerScore
+  collectBudTokens,
+  computePlayerScore,
+  forceBloom,
+  harvestBudsForPoints
 } from "@/lib/game/engine";
 import { gameDocRef, gameLogColRef, playerDocRef, playersColRef } from "@/lib/game/refs";
 import type { GameDoc, GameLogEntryDoc, GardenSlot, GardenSlotState, PlayerDoc, ResourceKey } from "@/lib/game/types";
@@ -95,6 +97,23 @@ function consumeTurnAction(
 
 function getCurrentEvent(game: Omit<GameDoc, "id">) {
   return EVENT_CARDS.find((event) => event.id === game.currentEventId) ?? null;
+}
+
+function applyBloomWitherCheck(gardenSlots: GardenSlot[]): { gardenSlots: GardenSlot[]; withered: boolean } {
+  const grownIndices = gardenSlots
+    .map((slot, index) => ({ slot, index }))
+    .filter(({ slot }) => slot.state === "grown")
+    .map(({ index }) => index);
+
+  if (grownIndices.length === 0 || Math.random() >= 0.5) {
+    return { gardenSlots, withered: false };
+  }
+
+  const randomIndex = grownIndices[Math.floor(Math.random() * grownIndices.length)];
+  const nextSlots = [...gardenSlots];
+  nextSlots[randomIndex] = { state: "withered", plantId: null };
+
+  return { gardenSlots: nextSlots, withered: true };
 }
 
 function resolveNextTurnState(game: Omit<GameDoc, "id">, players: QueryDocumentSnapshot<Omit<PlayerDoc, "id">>[], currentPlayerId: string) {
@@ -637,6 +656,88 @@ export async function gambleBloomTx(gameId: string, uid: string) {
   });
 }
 
+export async function harvestNowTx(gameId: string, uid: string) {
+  const players = await getOrderedPlayers(gameId);
+
+  return runTransaction(firestore, async (transaction) => {
+    const gameSnap = await transaction.get(gameDocRef(gameId));
+    assert(gameSnap.exists(), "Game not found.");
+    const gameData = gameSnap.data();
+    requireTurnPhase(gameData);
+
+    const playerSnap = getPlayerByUid(players, uid);
+    assert(gameData.activePlayerId === playerSnap.id, "Only the active player can perform turn actions.");
+    requireActionsRemaining(gameData);
+
+    const playerData = playerSnap.data();
+    assert(playerData.resources.buds > 0, "No buds available to harvest.");
+
+    const harvested = harvestBudsForPoints({ id: playerSnap.id, ...playerData });
+
+    transaction.update(playerDocRef(gameId, playerSnap.id), {
+      resources: harvested.resources,
+      score: harvested.score
+    });
+
+    consumeTurnAction(transaction, gameId, gameData, players, playerSnap.id, playerData.displayName);
+
+    appendLog(transaction, gameId, {
+      message: `${playerData.displayName} harvested ${playerData.resources.buds} bud${playerData.resources.buds === 1 ? "" : "s"} immediately for ${harvested.score - playerData.score} point${harvested.score - playerData.score === 1 ? "" : "s"}.`,
+      playerId: playerSnap.id,
+      type: "action"
+    });
+  });
+}
+
+export async function forceBloomTx(gameId: string, uid: string) {
+  const players = await getOrderedPlayers(gameId);
+
+  return runTransaction(firestore, async (transaction) => {
+    const gameSnap = await transaction.get(gameDocRef(gameId));
+    assert(gameSnap.exists(), "Game not found.");
+    const gameData = gameSnap.data();
+    requireTurnPhase(gameData);
+
+    const playerSnap = getPlayerByUid(players, uid);
+    assert(gameData.activePlayerId === playerSnap.id, "Only the active player can perform turn actions.");
+    requireActionsRemaining(gameData);
+
+    const playerData = playerSnap.data();
+    assert(playerData.resources.buds > 0, "No buds available to bloom.");
+
+    const bloomed = forceBloom({ id: playerSnap.id, ...playerData });
+    const riskRoll = Math.floor(Math.random() * 3);
+    const nextResources = { ...bloomed.resources };
+    let nextSlots = normalizeGardenSlots(playerData);
+    let riskMessage = "with no side effects";
+
+    if (riskRoll === 0) {
+      nextResources.water = Math.max(0, nextResources.water - 1);
+      riskMessage = "but lost 1 water";
+    } else if (riskRoll === 1) {
+      nextResources.bugs += 1;
+      riskMessage = "but attracted +1 bug";
+    } else {
+      const witherResult = applyBloomWitherCheck(nextSlots);
+      nextSlots = witherResult.gardenSlots;
+      riskMessage = witherResult.withered ? "and a grown plant withered" : "and passed the wither check";
+    }
+
+    transaction.update(playerDocRef(gameId, playerSnap.id), {
+      gardenSlots: nextSlots,
+      resources: nextResources
+    });
+
+    consumeTurnAction(transaction, gameId, gameData, players, playerSnap.id, playerData.displayName);
+
+    appendLog(transaction, gameId, {
+      message: `${playerData.displayName} forced ${playerData.resources.buds} bud${playerData.resources.buds === 1 ? "" : "s"} to bloom into flowers ${riskMessage}.`,
+      playerId: playerSnap.id,
+      type: "action"
+    });
+  });
+}
+
 export async function passTurnTx(gameId: string, uid: string) {
   return advanceTurnOrRoundTx(gameId, uid);
 }
@@ -747,8 +848,8 @@ export async function resolveRoundUpkeepTx(gameId: string, uid: string) {
       const basePlayer = { id: snapshot.id, ...snapshot.data() };
       const afterDecay = applyPlantDecayAndDeaths(basePlayer);
       const afterAdjacentBonuses = applyAdjacentPairBonuses(afterDecay);
-      const afterFlowerCollection = collectFlowerTokens(afterAdjacentBonuses);
-      const afterResourcePressure = applyResourcePressureCaps(afterFlowerCollection);
+      const afterBudCollection = collectBudTokens(afterAdjacentBonuses);
+      const afterResourcePressure = applyResourcePressureCaps(afterBudCollection);
 
       return {
         ...afterResourcePressure,
@@ -796,7 +897,7 @@ export async function resolveRoundUpkeepTx(gameId: string, uid: string) {
     appendLog(transaction, gameId, {
       message: isGameOver
         ? `Round ${gameData.round} upkeep and event resolved. Game ended.`
-        : `Round ${gameData.round} upkeep resolved, then event resolved. Round ${nextRound} turns begin.`,
+        : `Round ${gameData.round} upkeep resolved (buds generated), then event resolved. Round ${nextRound} turns begin.`,
       type: "system"
     });
   });

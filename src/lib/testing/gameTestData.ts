@@ -38,6 +38,7 @@ export const GAME_TEST_DATA: GameTestData = {
       resources: {
         water: 4,
         seeds: 3,
+        buds: 2,
         flowers: 1,
         bugs: 0
       },
@@ -59,6 +60,7 @@ export const GAME_TEST_DATA: GameTestData = {
       resources: {
         water: 2,
         seeds: 4,
+        buds: 1,
         flowers: 0,
         bugs: 1
       },

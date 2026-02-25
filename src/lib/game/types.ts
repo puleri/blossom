@@ -9,11 +9,12 @@ export interface GardenSlot {
   plantId: string | null;
 }
 
-export type ResourceKey = "water" | "seeds" | "flowers" | "bugs";
+export type ResourceKey = "water" | "seeds" | "buds" | "flowers" | "bugs";
 
 export interface PlayerResources {
   water: number;
   seeds: number;
+  buds: number;
   flowers: number;
   bugs: number;
 }
