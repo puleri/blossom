@@ -13,7 +13,21 @@ const ABILITY_DESCRIPTION_MAP: Record<string, string> = {
   infestation_proof_event: "Event reaction: blocks pest events and gains 1 seed.",
   shared_hunt_round_end: "Round end: converts up to 2 bugs into flowers and gains 1 seed.",
   spreading_runner_round_end: "Round end: spreads runners to expand presence.",
-  spread_enters_with_zero_water: "Spreads start dry and must be watered to grow."
+  spread_enters_with_zero_water: "Spreads start dry and must be watered to grow.",
+  modest_bloom_round_end: "Round end: if full water, gain 1 flower token.",
+  fertile_bloom_round_end: "Round end: if this flowers, gain 1 seed.",
+  lunar_hydration_round_end: "Round end: if this flowers, gain 1 water.",
+  shared_radiance_passive:
+    "Passive: adjacent plants need 1 less water to count as full for flowering (minimum 1 water).",
+  royal_bloom_round_end: "Round end: if this flowers, gain 2 flower tokens.",
+  seed_conversion_round_end: "Round end: may convert 2 flower tokens into 1 seed.",
+  pollinator_surge_round_end: "Round end: if two or more plants flower, gain 1 additional flower token.",
+  chorus_effect_round_end: "Round end: if at least 3 plants flower, gain 2 seeds.",
+  crystal_bloom_round_end: "Round end: if this flowers while full, gain 1 flower token and 1 water.",
+  bloom_transmutation_action_once_per_round:
+    "Action (once per round): spend 1 flower token to gain 1 water and 1 seed.",
+  unified_bloom_round_end: "Round end: if full, adjacent plants gain 1 water before flowering checks.",
+  grand_bloom_event_round_end: "Round end: if 4 or more plants flower, gain 3 flower tokens and 2 seeds."
 };
 
 const PLANT_CARD_MAP = new Map(PLANT_CARDS.map((card) => [card.id, card]));
