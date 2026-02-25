@@ -278,7 +278,7 @@ export default function TestingPage() {
   }
 
 
-  const pestBalanceSnapshots = useMemo(() => {
+  const carnivorousSnapshots = useMemo(() => {
     const baseline = {
       ...GAME_TEST_DATA.players[0],
       resources: { ...GAME_TEST_DATA.players[0].resources, flowers: 3, bugs: 2 }
@@ -317,19 +317,19 @@ export default function TestingPage() {
 
     return [
       {
-        label: "No pest counterplay",
+        label: "Baseline infestation pressure",
         before: baseline.resources,
         after: baselineAfterEvent.resources,
         scorePreview: computePlayerScore(baselineAfterEvent)
       },
       {
-        label: "Venus Flytrap reaction vs infestation",
+        label: "Venus Flytrap adapts to infestation",
         before: flytrapPlayer.resources,
         after: flytrapAfterReaction.resources,
         scorePreview: computePlayerScore(flytrapAfterReaction)
       },
       {
-        label: "Pitcher Plant converts pests at round end",
+        label: "Pitcher Plant adjacency engine",
         before: pitcherPlayer.resources,
         after: pitcherAfterHunt.resources,
         scorePreview: computePlayerScore(pitcherAfterHunt)
@@ -352,10 +352,10 @@ export default function TestingPage() {
       ) : null}
 
       <section>
-        <h2>Pest balance snapshots</h2>
-        <p>Representative board states for validating that bugs are a penalty unless countered by pest-synergy plants.</p>
+        <h2>Carnivorous engine snapshots</h2>
+        <p>Representative board states for validating that Carnivorous plants convert infestation pressure into scaling bug economy.</p>
         <ul>
-          {pestBalanceSnapshots.map((snapshot) => (
+          {carnivorousSnapshots.map((snapshot) => (
             <li key={snapshot.label}>
               <strong>{snapshot.label}</strong>: before (Seeds {snapshot.before.seeds}, Flowers {snapshot.before.flowers}, Bugs {snapshot.before.bugs}) → after (Seeds {snapshot.after.seeds}, Flowers {snapshot.after.flowers}, Bugs {snapshot.after.bugs}), score preview {snapshot.scorePreview}.
             </li>

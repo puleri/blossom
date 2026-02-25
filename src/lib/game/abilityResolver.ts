@@ -144,6 +144,34 @@ function countFloweringPlants(slots: GardenSlot[]) {
   return slots.reduce((count, _, slotIndex) => count + (isPlantFlowering(slots, slotIndex) ? 1 : 0), 0);
 }
 
+
+const CARNIVOROUS_PLANT_IDS = new Set([
+  "venus-flytrap",
+  "pitcher-plant",
+  "sundew-cluster",
+  "cobra-lily",
+  "bladderwort",
+  "thornmaw-bramble",
+  "sporefang-vine",
+  "gloomtrap-shrub",
+  "mawroot-bulb",
+  "carrion-bloom",
+  "razorleaf-net",
+  "apex-devourer"
+]);
+
+function isCarnivorousPlant(slots: GardenSlot[], slotIndex: number) {
+  const card = getGrownPlantCard(slots, slotIndex);
+  return card ? CARNIVOROUS_PLANT_IDS.has(card.id) : false;
+}
+
+function countAdjacentCarnivorousPlants(slots: GardenSlot[], slotIndex: number) {
+  return [slotIndex - 1, slotIndex + 1].reduce(
+    (count, adjacentIndex) => count + (isCarnivorousPlant(slots, adjacentIndex) ? 1 : 0),
+    0
+  );
+}
+
 const ROUND_END_RESOLVERS: Record<string, (context: RoundEndAbilityResolverContext) => AbilityResolutionResult> = {
   trellis_chain_round_end: ({ ability, player }) => {
     const slots = normalizeGardenSlots(player);
@@ -211,17 +239,15 @@ const ROUND_END_RESOLVERS: Record<string, (context: RoundEndAbilityResolverConte
     };
   },
   shared_hunt_round_end: ({ ability, player }) => {
-    const capturedPests = Math.min(player.resources.bugs, 2);
-    const seedGain = capturedPests > 0 ? 1 : 0;
+    const slots = normalizeGardenSlots(player);
+    const adjacentCarnivores = countAdjacentCarnivorousPlants(slots, ability.slotIndex);
 
     return {
       player: {
         ...player,
         resources: {
           ...player.resources,
-          bugs: clampResource(player.resources.bugs - capturedPests),
-          flowers: player.resources.flowers + capturedPests,
-          seeds: player.resources.seeds + seedGain
+          bugs: player.resources.bugs + adjacentCarnivores
         }
       },
       logs: [
@@ -230,9 +256,160 @@ const ROUND_END_RESOLVERS: Record<string, (context: RoundEndAbilityResolverConte
           plantId: ability.plantId,
           slotIndex: ability.slotIndex,
           message:
-            capturedPests > 0
-              ? `Triggered ${ability.abilityId}: converted ${capturedPests} bug${capturedPests === 1 ? "" : "s"} into flowers and gained ${seedGain} seed.`
-              : `Triggered ${ability.abilityId}: no bugs to convert this round.`
+            adjacentCarnivores > 0
+              ? `Triggered ${ability.abilityId}: ${adjacentCarnivores} adjacent Carnivorous plant${adjacentCarnivores === 1 ? "" : "s"} hunted and generated ${adjacentCarnivores} bug token${adjacentCarnivores === 1 ? "" : "s"}.`
+              : `Triggered ${ability.abilityId}: no adjacent Carnivorous plants, no bug tokens generated.`
+        }
+      ]
+    };
+  },
+  venomous_bloom_round_end: ({ ability, player }) => {
+    const slots = normalizeGardenSlots(player);
+    const flowered = isPlantFlowering(slots, ability.slotIndex);
+
+    return {
+      player: {
+        ...player,
+        resources: {
+          ...player.resources,
+          bugs: player.resources.bugs + (flowered ? 2 : 0)
+        }
+      },
+      logs: [
+        {
+          abilityId: ability.abilityId,
+          plantId: ability.plantId,
+          slotIndex: ability.slotIndex,
+          message: flowered
+            ? `Triggered ${ability.abilityId}: flowered and gained 2 bug tokens.`
+            : `Triggered ${ability.abilityId}: did not flower, no bug tokens gained.`
+        }
+      ]
+    };
+  },
+  water_feast_round_end: ({ ability, player }) => {
+    const waterGain = player.resources.bugs >= 1 ? 1 : 0;
+
+    return {
+      player: {
+        ...player,
+        resources: {
+          ...player.resources,
+          water: player.resources.water + waterGain
+        }
+      },
+      logs: [
+        {
+          abilityId: ability.abilityId,
+          plantId: ability.plantId,
+          slotIndex: ability.slotIndex,
+          message:
+            waterGain > 0
+              ? `Triggered ${ability.abilityId}: consumed ambient pests and gained 1 water.`
+              : `Triggered ${ability.abilityId}: no bug tokens available, no water gained.`
+        }
+      ]
+    };
+  },
+  predatory_pressure_round_end: ({ ability, player }) => {
+    const activePressure = player.resources.bugs >= 2;
+
+    return {
+      player: {
+        ...player,
+        resources: {
+          ...player.resources,
+          seeds: player.resources.seeds + (activePressure ? 1 : 0)
+        }
+      },
+      logs: [
+        {
+          abilityId: ability.abilityId,
+          plantId: ability.plantId,
+          slotIndex: ability.slotIndex,
+          message: activePressure
+            ? `Triggered ${ability.abilityId}: predatory pressure online, gained 1 seed.`
+            : `Triggered ${ability.abilityId}: fewer than 2 bug tokens, no pressure effect.`
+        }
+      ]
+    };
+  },
+  dark_canopy_round_end: ({ ability, player }) => {
+    const slots = normalizeGardenSlots(player);
+    const adjacentCarnivores = countAdjacentCarnivorousPlants(slots, ability.slotIndex);
+    const bugsGained = adjacentCarnivores >= 2 ? 2 : 0;
+
+    return {
+      player: {
+        ...player,
+        resources: {
+          ...player.resources,
+          bugs: player.resources.bugs + bugsGained
+        }
+      },
+      logs: [
+        {
+          abilityId: ability.abilityId,
+          plantId: ability.plantId,
+          slotIndex: ability.slotIndex,
+          message:
+            bugsGained > 0
+              ? `Triggered ${ability.abilityId}: surrounded by Carnivorous plants, gained 2 bug tokens.`
+              : `Triggered ${ability.abilityId}: not enough Carnivorous adjacency, no bug tokens gained.`
+        }
+      ]
+    };
+  },
+  feeding_frenzy_round_end: ({ ability, player }) => {
+    const frenzyOnline = player.resources.bugs >= 3;
+
+    return {
+      player: {
+        ...player,
+        resources: {
+          ...player.resources,
+          bugs: player.resources.bugs + (frenzyOnline ? 2 : 0)
+        }
+      },
+      logs: [
+        {
+          abilityId: ability.abilityId,
+          plantId: ability.plantId,
+          slotIndex: ability.slotIndex,
+          message: frenzyOnline
+            ? `Triggered ${ability.abilityId}: feeding frenzy triggered, gained 2 bug tokens.`
+            : `Triggered ${ability.abilityId}: no plant deaths tracked, frenzy fallback not met.`
+        }
+      ]
+    };
+  },
+  web_of_fangs_round_end: ({ ability, player }) => {
+    const slots = normalizeGardenSlots(player);
+    const adjacentFloweringCarnivores = [ability.slotIndex - 1, ability.slotIndex + 1].reduce((count, adjacentIndex) => {
+      if (!isCarnivorousPlant(slots, adjacentIndex)) {
+        return count;
+      }
+
+      return count + (isPlantFlowering(slots, adjacentIndex) ? 1 : 0);
+    }, 0);
+
+    return {
+      player: {
+        ...player,
+        resources: {
+          ...player.resources,
+          bugs: player.resources.bugs + adjacentFloweringCarnivores
+        }
+      },
+      logs: [
+        {
+          abilityId: ability.abilityId,
+          plantId: ability.plantId,
+          slotIndex: ability.slotIndex,
+          message:
+            adjacentFloweringCarnivores > 0
+              ? `Triggered ${ability.abilityId}: ${adjacentFloweringCarnivores} adjacent Carnivorous bloom${adjacentFloweringCarnivores === 1 ? "" : "s"} fed the web, gained ${adjacentFloweringCarnivores} bug token${adjacentFloweringCarnivores === 1 ? "" : "s"}.`
+              : `Triggered ${ability.abilityId}: no adjacent flowering Carnivorous plants.`
         }
       ]
     };
@@ -534,16 +711,51 @@ const EVENT_REACTION_RESOLVERS: Record<string, (context: EventReactionResolverCo
         ...player,
         resources: {
           ...player.resources,
-          seeds: player.resources.seeds + 1
+          bugs: player.resources.bugs + 1
         }
       },
-      eventBlocked: true,
+      eventBlocked: false,
       logs: [
         {
           abilityId: ability.abilityId,
           plantId: ability.plantId,
           slotIndex: ability.slotIndex,
-          message: `Triggered ${ability.abilityId}: blocked pest-tag event pressure and gained 1 seed.`
+          message: `Triggered ${ability.abilityId}: adapted to infestation and gained +1 bug token.`
+        }
+      ]
+    };
+  },
+  infestation_catalyst_event: ({ ability, player, event }) => {
+    if (!event.tags.includes("pest")) {
+      return {
+        player,
+        eventBlocked: false,
+        logs: [
+          {
+            abilityId: ability.abilityId,
+            plantId: ability.plantId,
+            slotIndex: ability.slotIndex,
+            message: `Triggered ${ability.abilityId}: no effect because event tags are ${event.tags.join(",")}.`
+          }
+        ]
+      };
+    }
+
+    return {
+      player: {
+        ...player,
+        resources: {
+          ...player.resources,
+          bugs: player.resources.bugs + 1
+        }
+      },
+      eventBlocked: false,
+      logs: [
+        {
+          abilityId: ability.abilityId,
+          plantId: ability.plantId,
+          slotIndex: ability.slotIndex,
+          message: `Triggered ${ability.abilityId}: amplified infestation and gained +1 additional bug token.`
         }
       ]
     };
@@ -622,6 +834,80 @@ const ACTIVATION_RESOLVERS: Record<string, (context: ActivationResolverContext) 
           plantId: ability.plantId,
           slotIndex: ability.slotIndex,
           message: `Activated ${ability.abilityId}: spent 1 flower to gain 1 water and 1 seed.`
+        }
+      ]
+    };
+  },
+  sticky_trap_action_once_per_round: ({ ability, player, round }) => {
+    const usageCount = getUsageCount(player, round, ability.slotIndex, ability.abilityId);
+    if (usageCount > 0) {
+      throw new Error("This plant ability was already activated this round.");
+    }
+
+    if (player.resources.bugs < 1) {
+      throw new Error("Not enough bugs to activate this plant ability.");
+    }
+
+    const nextPlayer = markAbilityUsed(
+      {
+        ...player,
+        resources: {
+          ...player.resources,
+          bugs: clampResource(player.resources.bugs - 1),
+          seeds: player.resources.seeds + 1
+        }
+      },
+      round,
+      ability.slotIndex,
+      ability.abilityId
+    );
+
+    return {
+      player: nextPlayer,
+      consumedAbilityId: ability.abilityId,
+      logs: [
+        {
+          abilityId: ability.abilityId,
+          plantId: ability.plantId,
+          slotIndex: ability.slotIndex,
+          message: `Activated ${ability.abilityId}: spent 1 bug to gain 1 seed.`
+        }
+      ]
+    };
+  },
+  digest_action: ({ ability, player, round }) => {
+    const usageCount = getUsageCount(player, round, ability.slotIndex, ability.abilityId);
+    if (usageCount > 0) {
+      throw new Error("This plant ability was already activated this round.");
+    }
+
+    if (player.resources.bugs < 2) {
+      throw new Error("Not enough bugs to activate this plant ability.");
+    }
+
+    const nextPlayer = markAbilityUsed(
+      {
+        ...player,
+        resources: {
+          ...player.resources,
+          bugs: clampResource(player.resources.bugs - 2),
+          flowers: player.resources.flowers + 1
+        }
+      },
+      round,
+      ability.slotIndex,
+      ability.abilityId
+    );
+
+    return {
+      player: nextPlayer,
+      consumedAbilityId: ability.abilityId,
+      logs: [
+        {
+          abilityId: ability.abilityId,
+          plantId: ability.plantId,
+          slotIndex: ability.slotIndex,
+          message: `Activated ${ability.abilityId}: digested 2 bugs into 1 flower.`
         }
       ]
     };

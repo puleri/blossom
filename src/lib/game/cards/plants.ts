@@ -112,6 +112,106 @@ export const PLANT_CARDS: PlantCard[] = [
     abilities: ["shared_hunt_round_end"]
   },
   {
+    id: "sundew-cluster",
+    name: "Sundew Cluster",
+    seedCost: 1,
+    points: 3,
+    waterCapacity: 2,
+    decayPerRound: 1,
+    requiresUpkeep: true,
+    abilities: ["sticky_trap_action_once_per_round"]
+  },
+  {
+    id: "cobra-lily",
+    name: "Cobra Lily",
+    seedCost: 3,
+    points: 8,
+    waterCapacity: 3,
+    decayPerRound: 1,
+    requiresUpkeep: true,
+    abilities: ["venomous_bloom_round_end"]
+  },
+  {
+    id: "bladderwort",
+    name: "Bladderwort",
+    seedCost: 2,
+    points: 5,
+    waterCapacity: 3,
+    decayPerRound: 1,
+    requiresUpkeep: true,
+    abilities: ["water_feast_round_end"]
+  },
+  {
+    id: "thornmaw-bramble",
+    name: "Thornmaw Bramble",
+    seedCost: 2,
+    points: 6,
+    waterCapacity: 3,
+    decayPerRound: 1,
+    requiresUpkeep: true,
+    abilities: ["predatory_pressure_round_end"]
+  },
+  {
+    id: "sporefang-vine",
+    name: "Sporefang Vine",
+    seedCost: 2,
+    points: 6,
+    waterCapacity: 3,
+    decayPerRound: 1,
+    requiresUpkeep: true,
+    abilities: ["infestation_catalyst_event"]
+  },
+  {
+    id: "gloomtrap-shrub",
+    name: "Gloomtrap Shrub",
+    seedCost: 3,
+    points: 9,
+    waterCapacity: 4,
+    decayPerRound: 1,
+    requiresUpkeep: true,
+    abilities: ["dark_canopy_round_end"]
+  },
+  {
+    id: "mawroot-bulb",
+    name: "Mawroot Bulb",
+    seedCost: 2,
+    points: 5,
+    waterCapacity: 2,
+    decayPerRound: 1,
+    requiresUpkeep: true,
+    abilities: ["digest_action"]
+  },
+  {
+    id: "carrion-bloom",
+    name: "Carrion Bloom",
+    seedCost: 3,
+    points: 8,
+    waterCapacity: 3,
+    decayPerRound: 1,
+    requiresUpkeep: true,
+    abilities: ["feeding_frenzy_round_end"]
+  },
+  {
+    id: "razorleaf-net",
+    name: "Razorleaf Net",
+    seedCost: 2,
+    points: 6,
+    waterCapacity: 3,
+    decayPerRound: 1,
+    requiresUpkeep: true,
+    abilities: ["web_of_fangs_round_end"]
+  },
+  {
+    id: "apex-devourer",
+    name: "Apex Devourer",
+    seedCost: 4,
+    points: 12,
+    waterCapacity: 4,
+    decayPerRound: 1,
+    requiresUpkeep: true,
+    abilities: ["sovereign_predator_game_end"]
+  },
+  {
     id: "mint",
     name: "Mint",
     seedCost: 1,

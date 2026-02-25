@@ -18,7 +18,7 @@ export function PlayerList({ players, activePlayerId }: PlayerListProps) {
             {player.displayName}
             {player.isHost ? " (Host)" : ""}
             {player.id === activePlayerId ? " • Active" : ""} — Score: {player.score}, Water: {player.resources.water}, Seeds: {player.resources.seeds}, Buds: {player.resources.buds}, Flowers: {player.resources.flowers},{" "}
-            <span title="Bugs are harmful by default. Counterplay: Ladybugs event, Venus Flytrap reaction, and Pitcher Plant hunt conversion.">
+            <span title="Bugs are harmful by default. Counterplay: Ladybugs, Venus Flytrap adaptation, and Carnivorous bug conversion abilities.">
               Bugs (penalty): {player.resources.bugs}
             </span>
           </li>

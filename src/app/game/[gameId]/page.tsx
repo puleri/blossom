@@ -461,7 +461,7 @@ export default function GamePage({ params }: GamePageProps) {
                     })
                   }
                   disabled={Boolean(busyAction) || actionsExhausted || currentPlayer.resources.buds < 1}
-                  title="Risky: convert buds into flowers, but may lose water, gain bugs, or fail a wither check. Bug counterplay includes Ladybugs, Venus Flytrap, and Pitcher Plant."
+                  title="Risky: convert buds into flowers, but may lose water, gain bugs, or fail a wither check. Bug counterplay includes Ladybugs plus Carnivorous conversion cards like Sundew Cluster and Mawroot Bulb."
                 >
                   {busyAction === "force-bloom" ? "Forcing bloom..." : "Force bloom (risky hold payoff)"}
                 </button>
