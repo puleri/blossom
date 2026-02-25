@@ -1,4 +1,10 @@
 import { getPlantCardById } from "@/lib/game/cards/details";
+import {
+  resolveEventReactionWindow,
+  resolveOncePerTurnActivation,
+  resolveRoundEndAbilityWindow,
+  type AbilityTriggerLog
+} from "@/lib/game/abilityResolver";
 import type { EventCard, GardenSlot, GardenSlotState, PlayerDoc } from "@/lib/game/types";
 
 function clampResource(value: number) {
@@ -41,6 +47,39 @@ export function applyEventToPlayers(players: PlayerDoc[], event: EventCard): Pla
 
     return { ...player, resources: nextResources };
   });
+}
+
+export function resolveRoundEndUpkeepStartAbilities(players: PlayerDoc[]) {
+  return players.map((player) => {
+    const resolved = resolveRoundEndAbilityWindow(player);
+    return {
+      player: resolved.player,
+      logs: resolved.logs
+    };
+  });
+}
+
+export function applyEventToPlayersWithReactions(players: PlayerDoc[], event: EventCard) {
+  const logs: Array<{ playerId: string; trigger: AbilityTriggerLog }> = [];
+
+  const updatedPlayers = players.map((player) => {
+    const reaction = resolveEventReactionWindow(player, event);
+    reaction.logs.forEach((trigger) => {
+      logs.push({ playerId: player.id, trigger });
+    });
+
+    if (reaction.eventBlocked && event.id === "infestation") {
+      return reaction.player;
+    }
+
+    return applyEventToPlayers([reaction.player], event)[0];
+  });
+
+  return { players: updatedPlayers, logs };
+}
+
+export function activatePlantAbilityForTurn(player: PlayerDoc, slotIndex: number, round: number) {
+  return resolveOncePerTurnActivation(player, slotIndex, round);
 }
 
 export function applyPlantDecayAndDeaths(player: PlayerDoc): PlayerDoc {
