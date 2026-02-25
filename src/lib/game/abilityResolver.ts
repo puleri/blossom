@@ -169,6 +169,33 @@ const ROUND_END_RESOLVERS: Record<string, (context: RoundEndAbilityResolverConte
         }
       ]
     };
+  },
+  shared_hunt_round_end: ({ ability, player }) => {
+    const capturedPests = Math.min(player.resources.bugs, 2);
+    const seedGain = capturedPests > 0 ? 1 : 0;
+
+    return {
+      player: {
+        ...player,
+        resources: {
+          ...player.resources,
+          bugs: clampResource(player.resources.bugs - capturedPests),
+          flowers: player.resources.flowers + capturedPests,
+          seeds: player.resources.seeds + seedGain
+        }
+      },
+      logs: [
+        {
+          abilityId: ability.abilityId,
+          plantId: ability.plantId,
+          slotIndex: ability.slotIndex,
+          message:
+            capturedPests > 0
+              ? `Triggered ${ability.abilityId}: converted ${capturedPests} bug${capturedPests === 1 ? "" : "s"} into flowers and gained ${seedGain} seed.`
+              : `Triggered ${ability.abilityId}: no bugs to convert this round.`
+        }
+      ]
+    };
   }
 };
 
@@ -190,14 +217,20 @@ const EVENT_REACTION_RESOLVERS: Record<string, (context: EventReactionResolverCo
     }
 
     return {
-      player,
+      player: {
+        ...player,
+        resources: {
+          ...player.resources,
+          seeds: player.resources.seeds + 1
+        }
+      },
       eventBlocked: true,
       logs: [
         {
           abilityId: ability.abilityId,
           plantId: ability.plantId,
           slotIndex: ability.slotIndex,
-          message: `Triggered ${ability.abilityId}: blocked pest-tag event pressure.`
+          message: `Triggered ${ability.abilityId}: blocked pest-tag event pressure and gained 1 seed.`
         }
       ]
     };
