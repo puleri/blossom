@@ -109,7 +109,7 @@ export function applyPlantDecayAndDeaths(player: PlayerDoc): PlayerDoc {
 
     const card = slot.plantId ? getPlantCardById(slot.plantId) : null;
     if (!card) {
-      return { ...slot, water: clampResource(slot.water - 1) };
+      return { ...slot, water: clampResource((slot.water ?? 0) - 1) };
     }
 
     const slotWater = slot.water ?? 0;
