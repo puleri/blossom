@@ -103,6 +103,19 @@ export function collectFlowerTokens(player: PlayerDoc): PlayerDoc {
   };
 }
 
+export function applyResourcePressureCaps(player: PlayerDoc): PlayerDoc {
+  const waterSoftCap = 6;
+  const waterDecay = player.resources.water > waterSoftCap ? 1 : 0;
+
+  return {
+    ...player,
+    resources: {
+      ...player.resources,
+      water: clampResource(player.resources.water - waterDecay)
+    }
+  };
+}
+
 export function computePlayerScore(player: PlayerDoc): number {
   const tableauPlantPoints = computeTableauPlantPoints(player);
   return tableauPlantPoints + player.resources.flowers + player.resources.bugs;
