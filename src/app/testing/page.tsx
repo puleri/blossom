@@ -19,6 +19,7 @@ import {
   resolveRoundEndUpkeepStartAbilities
 } from "@/lib/game/engine";
 import { GAME_TEST_DATA } from "@/lib/testing/gameTestData";
+import type { PlayerDoc } from "@/lib/game/types";
 
 export default function TestingPage() {
   const [game, setGame] = useState(() => ({ ...GAME_TEST_DATA.game }));
@@ -279,12 +280,12 @@ export default function TestingPage() {
 
 
   const carnivorousSnapshots = useMemo(() => {
-    const baseline = {
+    const baseline: PlayerDoc = {
       ...GAME_TEST_DATA.players[0],
       resources: { ...GAME_TEST_DATA.players[0].resources, flowers: 3, bugs: 2 }
     };
 
-    const flytrapPlayer = {
+    const flytrapPlayer: PlayerDoc = {
       ...GAME_TEST_DATA.players[0],
       resources: { ...GAME_TEST_DATA.players[0].resources, seeds: 1, bugs: 1 },
       gardenSlots: [
@@ -296,7 +297,7 @@ export default function TestingPage() {
       ]
     };
 
-    const pitcherPlayer = {
+    const pitcherPlayer: PlayerDoc = {
       ...GAME_TEST_DATA.players[0],
       resources: { ...GAME_TEST_DATA.players[0].resources, seeds: 1, flowers: 0, bugs: 3 },
       gardenSlots: [
