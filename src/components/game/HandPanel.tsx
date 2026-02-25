@@ -1,4 +1,5 @@
 import { getPlantAbilityDescriptions, getPlantCardById } from "@/lib/game/cards/details";
+import { getPlantSchoolBorderColor } from "@/lib/game/cards/schools";
 
 interface HandPanelProps {
   hand: string[];
@@ -14,12 +15,13 @@ export function HandPanel({ hand }: HandPanelProps) {
         <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 4 }}>
           {hand.map((cardId) => {
             const card = getPlantCardById(cardId);
+            const borderColor = getPlantSchoolBorderColor(cardId);
 
             return (
               <article
                 key={cardId}
                 style={{
-                  border: "1px solid #ccc",
+                  border: `2px solid ${borderColor}`,
                   borderRadius: 6,
                   padding: 8,
                   minWidth: 180,
