@@ -174,7 +174,7 @@ const ROUND_END_RESOLVERS: Record<string, (context: RoundEndAbilityResolverConte
 
 const EVENT_REACTION_RESOLVERS: Record<string, (context: EventReactionResolverContext) => EventReactionResult> = {
   infestation_proof_event: ({ ability, player, event }) => {
-    if (event.id !== "infestation") {
+    if (!event.tags.includes("pest")) {
       return {
         player,
         eventBlocked: false,
@@ -183,7 +183,7 @@ const EVENT_REACTION_RESOLVERS: Record<string, (context: EventReactionResolverCo
             abilityId: ability.abilityId,
             plantId: ability.plantId,
             slotIndex: ability.slotIndex,
-            message: `Triggered ${ability.abilityId}: no effect because event is ${event.id}.`
+            message: `Triggered ${ability.abilityId}: no effect because event tags are ${event.tags.join(",")}.`
           }
         ]
       };
@@ -197,7 +197,7 @@ const EVENT_REACTION_RESOLVERS: Record<string, (context: EventReactionResolverCo
           abilityId: ability.abilityId,
           plantId: ability.plantId,
           slotIndex: ability.slotIndex,
-          message: `Triggered ${ability.abilityId}: blocked infestation bug gain.`
+          message: `Triggered ${ability.abilityId}: blocked pest-tag event pressure.`
         }
       ]
     };

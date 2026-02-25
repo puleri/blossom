@@ -71,7 +71,7 @@ export function applyEventToPlayersWithReactions(players: PlayerDoc[], event: Ev
       logs.push({ playerId: player.id, trigger });
     });
 
-    if (reaction.eventBlocked && event.id === "infestation") {
+    if (reaction.eventBlocked && event.tags.includes("pest")) {
       return reaction.player;
     }
 

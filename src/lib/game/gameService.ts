@@ -49,6 +49,8 @@ export async function createGame(hostDisplayName: string, uid?: string | null) {
     eventDeck: shuffleFisherYates(EVENT_CARDS),
     plantDeck: [],
     currentEventId: null,
+    nextEventForecast: null,
+    upkeepEventResponses: {},
     lastPhaseResolvedRound: null,
     log: createEmptyGameLog(hostDisplayName)
   };
@@ -216,6 +218,8 @@ export async function startGameFromLobby(gameId: string, playerId: string, uid?:
     eventDeck: shuffleFisherYates(EVENT_CARDS),
     plantDeck: remainingDeck,
     currentEventId: null,
+    nextEventForecast: null,
+    upkeepEventResponses: {},
     lastPhaseResolvedRound: null,
     log: [...(gameData.log ?? []), "Game started. Setup phase begins."]
   });
