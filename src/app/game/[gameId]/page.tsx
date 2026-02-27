@@ -20,7 +20,6 @@ import {
   sowPlantTx,
   submitUpkeepEventResponseTx,
   submitSetupKeepTx,
-  tradeWaterForSeedsTx
 } from "@/lib/game/actions";
 import { EVENT_CARDS } from "@/lib/game/cards/events";
 import { getPlantCardById, getPlantSummaryLabel } from "@/lib/game/cards/details";
@@ -29,7 +28,6 @@ import { useGame } from "@/hooks/useGame";
 import { useGameLog } from "@/hooks/useGameLog";
 import { useMe } from "@/hooks/useMe";
 import { usePlayers } from "@/hooks/usePlayers";
-import type { ResourceKey } from "@/lib/game/types";
 
 interface GamePageProps {
   params: Promise<{ gameId: string }>;
@@ -45,12 +43,11 @@ export default function GamePage({ params }: GamePageProps) {
   const { data: logEntries, loading: logLoading, error: logError } = useGameLog(gameId);
   const [error, setError] = useState<string | null>(null);
   const [setupKeptPlantIds, setSetupKeptPlantIds] = useState<string[]>([]);
-  const [setupDiscardedResources, setSetupDiscardedResources] = useState<ResourceKey[]>([]);
   const [selectedPlantId, setSelectedPlantId] = useState<string>("");
   const [selectedSlot, setSelectedSlot] = useState<number>(0);
   const [selectedWitheredSlot, setSelectedWitheredSlot] = useState<number>(0);
   const [upkeepResponseChoice, setUpkeepResponseChoice] = useState<"mitigate" | "amplify" | "none">("none");
-  const [upkeepResponseResource, setUpkeepResponseResource] = useState<"water" | "seeds">("water");
+  const [upkeepResponseResource, setUpkeepResponseResource] = useState<"water">("water");
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const loading = gameLoading || playersLoading || meLoading;
 
@@ -84,7 +81,6 @@ export default function GamePage({ params }: GamePageProps) {
   useEffect(() => {
     if (!currentPlayer) {
       setSetupKeptPlantIds([]);
-      setSetupDiscardedResources([]);
       setSelectedPlantId("");
       setSelectedWitheredSlot(0);
       return;
@@ -99,16 +95,6 @@ export default function GamePage({ params }: GamePageProps) {
       return currentPlayer.hand[0] ?? "";
     });
   }, [currentHandKey, currentPlayer]);
-
-  useEffect(() => {
-    setSetupDiscardedResources((previous) => {
-      if (previous.length === setupKeptPlantIds.length) {
-        return previous;
-      }
-
-      return setupKeptPlantIds.map((_, index) => previous[index] ?? (index < 3 ? "water" : "seeds"));
-    });
-  }, [setupKeptPlantIds]);
 
 
   useEffect(() => {
@@ -149,12 +135,10 @@ export default function GamePage({ params }: GamePageProps) {
     setSetupKeptPlantIds((previous) => {
       if (previous.includes(plantId)) {
         const next = previous.filter((id) => id !== plantId);
-        setSetupDiscardedResources((resources) => resources.slice(0, next.length));
         return next;
       }
 
       const next = [...previous, plantId];
-      setSetupDiscardedResources((resources) => [...resources, "water" as ResourceKey].slice(0, next.length));
       return next;
     });
   }
@@ -231,15 +215,36 @@ export default function GamePage({ params }: GamePageProps) {
         <>
           <p>Waiting in lobby for players to join.</p>
           <PlayerList players={players} activePlayerId={game.activePlayerId} />
+          <section>
+            <h3>Player Gardens</h3>
+            <div style={{ display: "grid", gap: 16 }}>
+              {players.map((player) => (
+                <div key={`garden-${player.id}`}>
+                  <h4 style={{ marginBottom: 6 }}>{player.displayName}{player.id === currentPlayer?.id ? " (You)" : ""}</h4>
+                  <GardenTableau slots={player.gardenSlots} />
+                </div>
+              ))}
+            </div>
+          </section>
         </>
       ) : null}
 
       {game.phase === "setup" ? (
         <>
-          <p>Setup phase: keep 0-5 plants. Discard one resource per kept plant.</p>
+          <p>Setup phase: keep 0-5 plants.</p>
           <PlayerList players={players} activePlayerId={game.activePlayerId} />
           {currentPlayer ? <HandPanel hand={currentPlayer.hand} /> : null}
-          {currentPlayer ? <GardenTableau slots={currentPlayer.gardenSlots} /> : null}
+          <section>
+            <h3>Player Gardens</h3>
+            <div style={{ display: "grid", gap: 16 }}>
+              {players.map((player) => (
+                <div key={`garden-${player.id}`}>
+                  <h4 style={{ marginBottom: 6 }}>{player.displayName}{player.id === currentPlayer?.id ? " (You)" : ""}</h4>
+                  <GardenTableau slots={player.gardenSlots} />
+                </div>
+              ))}
+            </div>
+          </section>
 
           {currentPlayer && !currentPlayer.keptFromMulligan ? (
             <section>
@@ -260,26 +265,6 @@ export default function GamePage({ params }: GamePageProps) {
                 ))}
               </ul>
 
-              <h3>Discard resources ({setupKeptPlantIds.length} required)</h3>
-              {setupDiscardedResources.map((resource, index) => (
-                <label key={`discard-${index}`} style={{ display: "block" }}>
-                  Discard #{index + 1}
-                  <select
-                    value={resource}
-                    onChange={(event) => {
-                      const value = event.target.value as ResourceKey;
-                      setSetupDiscardedResources((previous) =>
-                        previous.map((existing, resourceIndex) => (resourceIndex === index ? value : existing))
-                      );
-                    }}
-                    disabled={Boolean(busyAction)}
-                  >
-                    <option value="water">Water</option>
-                    <option value="seeds">Seed</option>
-                  </select>
-                </label>
-              ))}
-
               <button
                 onClick={() =>
                   runAction("setup-submit", async () => {
@@ -287,10 +272,10 @@ export default function GamePage({ params }: GamePageProps) {
                       throw new Error("Missing authenticated user id.");
                     }
 
-                    await submitSetupKeepTx(gameId, user.uid, setupKeptPlantIds, setupDiscardedResources);
+                    await submitSetupKeepTx(gameId, user.uid, setupKeptPlantIds);
                   })
                 }
-                disabled={Boolean(busyAction) || setupDiscardedResources.length !== setupKeptPlantIds.length}
+                disabled={Boolean(busyAction)}
               >
                 {busyAction === "setup-submit" ? "Submitting..." : "Submit setup"}
               </button>
@@ -311,7 +296,17 @@ export default function GamePage({ params }: GamePageProps) {
           ) : null}
           <PlayerList players={players} activePlayerId={game.activePlayerId} />
           {currentPlayer ? <HandPanel hand={currentPlayer.hand} /> : null}
-          {currentPlayer ? <GardenTableau slots={currentPlayer.gardenSlots} /> : null}
+          <section>
+            <h3>Player Gardens</h3>
+            <div style={{ display: "grid", gap: 16 }}>
+              {players.map((player) => (
+                <div key={`garden-${player.id}`}>
+                  <h4 style={{ marginBottom: 6 }}>{player.displayName}{player.id === currentPlayer?.id ? " (You)" : ""}</h4>
+                  <GardenTableau slots={player.gardenSlots} />
+                </div>
+              ))}
+            </div>
+          </section>
 
           {isMyTurn && currentPlayer ? (
             <section>
@@ -351,14 +346,14 @@ export default function GamePage({ params }: GamePageProps) {
               </label>
 
               {actionsExhausted ? <p>No actions left. Your turn will advance automatically.</p> : null}
-              {!actionsExhausted ? <p style={{ marginTop: 8 }}>Safe actions: Well, Draw, Harvest Now, Pass. Risky actions: Trade Water for Seeds, Compost Withered, Gamble Bloom, Force Bloom.</p> : null}
+              {!actionsExhausted ? <p style={{ marginTop: 8 }}>Available actions: Plant, Well, Draw, Compost Withered, Gamble Bloom, Harvest, Force Bloom, Pass.</p> : null}
 
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                 <button
                   onClick={() =>
                     runAction("sow", async () => {
                       if (!user?.uid) throw new Error("Missing authenticated user id.");
-                      if (!selectedPlantId) throw new Error("Select a plant to sow.");
+                      if (!selectedPlantId) throw new Error("Select a plant to plant.");
                       await sowPlantTx(gameId, user.uid, selectedPlantId, selectedSlot);
                     })
                   }
@@ -366,11 +361,10 @@ export default function GamePage({ params }: GamePageProps) {
                     Boolean(busyAction) ||
                     actionsExhausted ||
                     !selectedPlantId ||
-                    !currentPlant ||
-                    currentPlayer.resources.seeds < currentPlant.seedCost
+                    !currentPlant
                   }
                 >
-                  {busyAction === "sow" ? "Sowing..." : "Sow"}
+                  {busyAction === "sow" ? "Planting..." : "Plant"}
                 </button>
 
                 <button
@@ -382,7 +376,7 @@ export default function GamePage({ params }: GamePageProps) {
                   }
                   disabled={Boolean(busyAction) || actionsExhausted}
                 >
-                  {busyAction === "well" ? "Visiting well..." : "Go to the well (water all seeds + gain 2 water)"}
+                  {busyAction === "well" ? "Visiting well..." : "Go to the well (water plants + gain 2 water)"}
                 </button>
 
                 <button
@@ -395,19 +389,6 @@ export default function GamePage({ params }: GamePageProps) {
                   disabled={Boolean(busyAction) || actionsExhausted}
                 >
                   {busyAction === "draw-plant" ? "Drawing..." : "Draw a plant card"}
-                </button>
-
-                <button
-                  onClick={() =>
-                    runAction("trade-water-seeds", async () => {
-                      if (!user?.uid) throw new Error("Missing authenticated user id.");
-                      await tradeWaterForSeedsTx(gameId, user.uid);
-                    })
-                  }
-                  disabled={Boolean(busyAction) || actionsExhausted || currentPlayer.resources.water < 2}
-                  title="Risky: spend 2 water to gain 1-2 seeds depending on event pressure."
-                >
-                  {busyAction === "trade-water-seeds" ? "Trading..." : "Trade 2 water for seeds (risky)"}
                 </button>
 
                 <button
@@ -495,6 +476,17 @@ export default function GamePage({ params }: GamePageProps) {
             </p>
           ) : null}
           <PlayerList players={players} activePlayerId={game.activePlayerId} />
+          <section>
+            <h3>Player Gardens</h3>
+            <div style={{ display: "grid", gap: 16 }}>
+              {players.map((player) => (
+                <div key={`garden-${player.id}`}>
+                  <h4 style={{ marginBottom: 6 }}>{player.displayName}{player.id === currentPlayer?.id ? " (You)" : ""}</h4>
+                  <GardenTableau slots={player.gardenSlots} />
+                </div>
+              ))}
+            </div>
+          </section>
           {currentPlayer ? (
             <section>
               <h3>Pre-upkeep event response</h3>
@@ -515,9 +507,8 @@ export default function GamePage({ params }: GamePageProps) {
                   </label>
                   <label>
                     Resource
-                    <select value={upkeepResponseResource} onChange={(event) => setUpkeepResponseResource(event.target.value as "water" | "seeds")} disabled={upkeepResponseChoice === "none"}>
+                    <select value={upkeepResponseResource} onChange={(event) => setUpkeepResponseResource(event.target.value as "water")} disabled={upkeepResponseChoice === "none"}>
                       <option value="water">Water</option>
-                      <option value="seeds">Seeds</option>
                     </select>
                   </label>
                   <button
@@ -559,6 +550,17 @@ export default function GamePage({ params }: GamePageProps) {
         <>
           <p>Game ended. Thanks for playing!</p>
           <PlayerList players={players} activePlayerId={game.activePlayerId} />
+          <section>
+            <h3>Player Gardens</h3>
+            <div style={{ display: "grid", gap: 16 }}>
+              {players.map((player) => (
+                <div key={`garden-${player.id}`}>
+                  <h4 style={{ marginBottom: 6 }}>{player.displayName}{player.id === currentPlayer?.id ? " (You)" : ""}</h4>
+                  <GardenTableau slots={player.gardenSlots} />
+                </div>
+              ))}
+            </div>
+          </section>
         </>
       ) : null}
 

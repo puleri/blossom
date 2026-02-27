@@ -1,8 +1,8 @@
 export const ROUNDS_TOTAL = 25;
 
-export const GARDEN_SLOT_MIN = 24;
-export const GARDEN_SLOT_MAX = 24;
-export const GARDEN_SLOT_DEFAULT = 24;
+export const GARDEN_SLOT_MIN = 15;
+export const GARDEN_SLOT_MAX = 15;
+export const GARDEN_SLOT_DEFAULT = 15;
 
 export const SETUP_HAND_SIZE = 5;
 

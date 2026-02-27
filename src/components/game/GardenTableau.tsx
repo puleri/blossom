@@ -7,12 +7,12 @@ interface GardenTableauProps {
 }
 
 export function GardenTableau({ slots }: GardenTableauProps) {
-  const totalSlots = 24;
+  const totalSlots = 15;
 
   return (
     <section>
       <h2>Garden Tableau</h2>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(6, minmax(120px, 1fr))", gap: 8 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(5, minmax(120px, 1fr))", gap: 8 }}>
         {Array.from({ length: totalSlots }, (_, index) => {
           const slot = slots[index] ?? { state: "empty", plantId: null };
           const plant = slot.plantId ? getPlantCardById(slot.plantId) : null;
@@ -24,9 +24,9 @@ export function GardenTableau({ slots }: GardenTableauProps) {
               <p style={{ margin: "6px 0" }}>State: {slot.state}</p>
               {plant ? (
                 <>
-                  <p style={{ margin: "6px 0" }}>{plant.name}</p>
+                  <p style={{ margin: "6px 0" }}>Plant: {plant.name}</p>
                   <p style={{ margin: "6px 0", fontSize: 12 }}>
-                    Seed {plant.seedCost} · Pts {plant.points} · Water {plant.waterCapacity}
+                    Pts {plant.points} · Water {plant.waterCapacity}
                   </p>
                   <p style={{ margin: "6px 0", fontSize: 12 }}>
                     Decay {plant.decayPerRound} · Upkeep {plant.requiresUpkeep ? "Yes" : "No"}

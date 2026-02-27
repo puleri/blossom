@@ -74,7 +74,7 @@ export function getPlantSummaryLabel(plantId: string) {
     return plantId;
   }
 
-  return `${card.name} (Seed ${card.seedCost}, Pts ${card.points}, Decay ${card.decayPerRound})`;
+  return `${card.name} (Pts ${card.points}, Decay ${card.decayPerRound})`;
 }
 
 export function getPlantAbilityDescriptions(abilityIds: string[]) {
