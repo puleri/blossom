@@ -28,7 +28,7 @@ import {
   resolveRoundEndUpkeepStartAbilities
 } from "@/lib/game/engine";
 import { gameDocRef, gameLogColRef, playerDocRef, playersColRef } from "@/lib/game/refs";
-import type { EventCard, EventForecast, GameDoc, GameLogEntryDoc, GardenSlot, GardenSlotState, PlayerDoc, ResourceKey, UpkeepEventResponse } from "@/lib/game/types";
+import type { EventCard, EventForecast, GameDoc, GameLogEntryDoc, GardenSlot, GardenSlotState, PlayerDoc, UpkeepEventResponse } from "@/lib/game/types";
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message);
@@ -301,8 +301,7 @@ export async function startGameSetupTx(gameId: string, uid: string) {
 export async function submitSetupKeepTx(
   gameId: string,
   uid: string,
-  keptPlantIds: string[],
-  discardedResources: ResourceKey[]
+  keptPlantIds: string[]
 ) {
   const players = await getOrderedPlayers(gameId);
 
@@ -326,17 +325,8 @@ export async function submitSetupKeepTx(
     const uniqueKeptIds = [...new Set(keptPlantIds)];
     assert(uniqueKeptIds.length === keptPlantIds.length, "Kept plants must be unique.");
 
-    assert(discardedResources.length === keptPlantIds.length, "Discard exactly one resource per kept plant.");
-
-    const nextResources = { ...playerData.resources };
-    discardedResources.forEach((resourceKey) => {
-      assert(nextResources[resourceKey] > 0, `Not enough ${resourceKey} to discard.`);
-      nextResources[resourceKey] -= 1;
-    });
-
     transaction.update(playerDocRef(gameId, playerSnap.id), {
       hand: uniqueKeptIds,
-      resources: nextResources,
       keptFromMulligan: true
     });
 
@@ -400,18 +390,12 @@ export async function sowPlantTx(gameId: string, uid: string, plantId: string, s
 
     const plant = getPlantCardById(plantId);
     assert(plant, "Plant card definition not found.");
-    assert(playerData.resources.seeds >= plant.seedCost, "Not enough seeds to sow this plant.");
-
     const nextSlots = normalizeGardenSlots(playerData);
     nextSlots[slotIndex] = { state: "seedling", plantId: plant.id, water: 0 };
 
     transaction.update(playerDocRef(gameId, playerSnap.id), {
       hand: playerData.hand.filter((cardId) => cardId !== plantId),
-      gardenSlots: nextSlots,
-      resources: {
-        ...playerData.resources,
-        seeds: playerData.resources.seeds - plant.seedCost
-      }
+      gardenSlots: nextSlots
     });
 
     const remainingActions = getRemainingActions(gameData) - 1;
@@ -430,7 +414,7 @@ export async function sowPlantTx(gameId: string, uid: string, plantId: string, s
     }
 
     appendLog(transaction, gameId, {
-      message: `${playerData.displayName} sowed ${plant.name} in slot ${slotIndex + 1}.`,
+      message: `${playerData.displayName} planted ${plant.name} in slot ${slotIndex + 1}.`,
       playerId: playerSnap.id,
       type: "action"
     });
@@ -886,7 +870,7 @@ export async function submitUpkeepEventResponseTx(
   gameId: string,
   uid: string,
   choice: "mitigate" | "amplify" | "none",
-  spentResource: "water" | "seeds" = "water"
+  spentResource: "water" = "water"
 ) {
   const players = await getOrderedPlayers(gameId);
 

@@ -51,7 +51,7 @@ export interface EventForecast {
 
 export interface UpkeepEventResponse {
   choice: "mitigate" | "amplify" | "none";
-  spentResource: "water" | "seeds" | null;
+  spentResource: "water" | null;
 }
 
 export interface PlayerDoc {

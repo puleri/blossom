@@ -33,7 +33,7 @@ export function HandPanel({ hand }: HandPanelProps) {
                 {card ? (
                   <>
                     <p style={{ margin: "6px 0", fontSize: 12 }}>
-                      Seed {card.seedCost} · Pts {card.points} · Water {card.waterCapacity}
+                      Pts {card.points} · Water {card.waterCapacity}
                     </p>
                     <p style={{ margin: "6px 0", fontSize: 12 }}>
                       Decay {card.decayPerRound} · Upkeep {card.requiresUpkeep ? "Yes" : "No"}
