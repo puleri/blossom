@@ -74,8 +74,23 @@ export function HandPanel({ hand, canPlant = false, busyAction = null, available
                       Ability: {getPlantAbilityDescriptions(card.abilities).join(" · ")}
                     </p>
 
-                    {canPlant && onPlantFromHand && activeCardId === cardId ? (
-                      <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 8 }}>
+                    {canPlant && onPlantFromHand ? (
+                      <div
+                        style={{
+                          marginTop: 8,
+                          padding: 6,
+                          borderRadius: 6,
+                          backgroundColor: "rgba(134, 239, 172, 0.18)",
+                          display: "flex",
+                          flexDirection: "column",
+                          gap: 6,
+                          opacity: activeCardId === cardId ? 1 : 0,
+                          transform: activeCardId === cardId ? "translateY(0)" : "translateY(-4px)",
+                          transition: "opacity 180ms ease, transform 180ms ease",
+                          pointerEvents: activeCardId === cardId ? "auto" : "none"
+                        }}
+                        aria-hidden={activeCardId !== cardId}
+                      >
                         {(availableBiomesByPlantId[cardId] ?? []).map((biome) => {
                           const theme = BIOME_BUTTON_THEME[biome];
 
