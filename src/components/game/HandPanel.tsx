@@ -1,14 +1,28 @@
-import { ReactNode } from "react";
+import { ReactNode, useState } from "react";
 import { getPlantAbilityDescriptions, getPlantCardById } from "@/lib/game/cards/details";
 import { getPlantEngineProfile } from "@/lib/game/cards/engineProfiles";
 import { getPlantSchoolBorderColor } from "@/lib/game/cards/schools";
+import { BIOME_LABELS } from "@/lib/game/constants";
+import type { BiomeName } from "@/lib/game/types";
 
 interface HandPanelProps {
   hand: string[];
+  canPlant?: boolean;
+  busyAction?: string | null;
+  availableBiomesByPlantId?: Partial<Record<string, BiomeName[]>>;
+  onPlantFromHand?: (plantId: string, biome: BiomeName) => void;
   children?: ReactNode;
 }
 
-export function HandPanel({ hand, children }: HandPanelProps) {
+const BIOME_BUTTON_THEME: Record<BiomeName, { background: string; border: string; color: string }> = {
+  desert: { background: "#f4d7a1", border: "#d6b272", color: "#4c3513" },
+  plains: { background: "#cde9a3", border: "#9bc260", color: "#23400f" },
+  rainforest: { background: "#9fd8b6", border: "#5aa67f", color: "#093b26" }
+};
+
+export function HandPanel({ hand, canPlant = false, busyAction = null, availableBiomesByPlantId = {}, onPlantFromHand, children }: HandPanelProps) {
+  const [activeCardId, setActiveCardId] = useState<string | null>(null);
+
   return (
     <section>
       <h2>Hand</h2>
@@ -24,7 +38,13 @@ export function HandPanel({ hand, children }: HandPanelProps) {
             return (
               <article
                 key={cardId}
+                onMouseEnter={() => setActiveCardId(cardId)}
+                onMouseLeave={() => setActiveCardId((previous) => (previous === cardId ? null : previous))}
+                onFocus={() => setActiveCardId(cardId)}
+                onBlur={() => setActiveCardId((previous) => (previous === cardId ? null : previous))}
+                tabIndex={0}
                 style={{
+                  position: "relative",
                   border: `4px solid ${borderColor}`,
                   borderRadius: 6,
                   padding: 8,
@@ -53,6 +73,36 @@ export function HandPanel({ hand, children }: HandPanelProps) {
                     <p style={{ margin: "6px 0", fontSize: 12 }}>
                       Ability: {getPlantAbilityDescriptions(card.abilities).join(" · ")}
                     </p>
+
+                    {canPlant && onPlantFromHand && activeCardId === cardId ? (
+                      <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 8 }}>
+                        {(availableBiomesByPlantId[cardId] ?? []).map((biome) => {
+                          const theme = BIOME_BUTTON_THEME[biome];
+
+                          return (
+                            <button
+                              key={`${cardId}-${biome}`}
+                              type="button"
+                              onClick={() => onPlantFromHand(cardId, biome)}
+                              disabled={Boolean(busyAction)}
+                              style={{
+                                backgroundColor: theme.background,
+                                borderColor: theme.border,
+                                color: theme.color,
+                                borderStyle: "solid",
+                                borderWidth: 1,
+                                borderRadius: 4,
+                                padding: "4px 8px",
+                                textAlign: "left",
+                                cursor: busyAction ? "wait" : "pointer"
+                              }}
+                            >
+                              {busyAction === "sow" ? "Planting..." : `Plant in ${BIOME_LABELS[biome]}`}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    ) : null}
                   </>
                 ) : null}
               </article>

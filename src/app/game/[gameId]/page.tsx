@@ -1,7 +1,7 @@
 "use client";
 
 import { use, useEffect, useMemo, useState } from "react";
-import { BIOME_LABELS } from "@/lib/game/constants";
+import { BIOME_SLOT_INDICES } from "@/lib/game/constants";
 import { useRouter } from "next/navigation";
 import { GameHeader } from "@/components/game/GameHeader";
 import { PlayerList } from "@/components/game/PlayerList";
@@ -25,6 +25,7 @@ import { useGame } from "@/hooks/useGame";
 import { useGameLog } from "@/hooks/useGameLog";
 import { useMe } from "@/hooks/useMe";
 import { usePlayers } from "@/hooks/usePlayers";
+import type { BiomeName } from "@/lib/game/types";
 
 interface GamePageProps {
   params: Promise<{ gameId: string }>;
@@ -40,8 +41,6 @@ export default function GamePage({ params }: GamePageProps) {
   const { data: logEntries, loading: logLoading, error: logError } = useGameLog(gameId);
   const [error, setError] = useState<string | null>(null);
   const [setupKeptPlantIds, setSetupKeptPlantIds] = useState<string[]>([]);
-  const [selectedPlantId, setSelectedPlantId] = useState<string>("");
-  const [selectedBiome, setSelectedBiome] = useState<"desert" | "plains" | "rainforest">("desert");
   const [upkeepResponseChoice, setUpkeepResponseChoice] = useState<"mitigate" | "amplify" | "none">("none");
   const [upkeepResponseResource, setUpkeepResponseResource] = useState<"water">("water");
   const [busyAction, setBusyAction] = useState<string | null>(null);
@@ -77,18 +76,10 @@ export default function GamePage({ params }: GamePageProps) {
   useEffect(() => {
     if (!currentPlayer) {
       setSetupKeptPlantIds([]);
-      setSelectedPlantId("");
       return;
     }
 
     setSetupKeptPlantIds(currentPlayer.hand);
-    setSelectedPlantId((previous) => {
-      if (previous && currentPlayer.hand.includes(previous)) {
-        return previous;
-      }
-
-      return currentPlayer.hand[0] ?? "";
-    });
   }, [currentHandKey, currentPlayer]);
 
   if (loading) {
@@ -167,7 +158,22 @@ export default function GamePage({ params }: GamePageProps) {
   const remainingTurnActions = game.phase === "turns" ? Math.max(0, game.remainingActions ?? 0) : 0;
   const actionsExhausted = game.phase === "turns" && isMyTurn && remainingTurnActions <= 0;
 
-  const currentPlant = getPlantCardById(selectedPlantId);
+  const plantableBiomes = useMemo(() => {
+    if (!currentPlayer) {
+      return [] as BiomeName[];
+    }
+
+    return (Object.keys(BIOME_SLOT_INDICES) as BiomeName[]).filter((biome) => {
+      const biomeSlots = BIOME_SLOT_INDICES[biome];
+      return biomeSlots.some((index) => currentPlayer.gardenSlots[index]?.state === "empty");
+    });
+  }, [currentPlayer]);
+
+  const availableBiomesByPlantId = useMemo(
+    () => Object.fromEntries(currentPlayer?.hand.map((plantId) => [plantId, plantableBiomes]) ?? []),
+    [currentPlayer?.hand, plantableBiomes]
+  );
+
   const currentEvent = EVENT_CARDS.find((event) => event.id === game.currentEventId) ?? null;
   const nextEventForecast = game.nextEventForecast ?? null;
   const isHost = Boolean(me?.id && me.id === game.hostPlayerId);
@@ -282,53 +288,30 @@ export default function GamePage({ params }: GamePageProps) {
           ) : null}
           <PlayerList players={players} activePlayerId={game.activePlayerId} />
           {currentPlayer ? (
-            <HandPanel hand={currentPlayer.hand}>
+            <HandPanel
+              hand={currentPlayer.hand}
+              canPlant={isMyTurn && !actionsExhausted}
+              busyAction={busyAction}
+              availableBiomesByPlantId={availableBiomesByPlantId}
+              onPlantFromHand={(plantId, biome) =>
+                runAction("sow", async () => {
+                  if (!user?.uid) throw new Error("Missing authenticated user id.");
+                  if (!getPlantCardById(plantId)) throw new Error("Select a plant to plant.");
+                  await sowPlantTx(gameId, user.uid, plantId, biome);
+                })
+              }
+            >
               {isMyTurn ? (
                 <>
                   <h3>Your turn actions</h3>
                   <p>Actions remaining: {remainingTurnActions}</p>
-                  <label>
-                    Plant from hand
-                    <select value={selectedPlantId} onChange={(event) => setSelectedPlantId(event.target.value)}>
-                      {currentPlayer.hand.map((plantId) => (
-                        <option key={plantId} value={plantId}>
-                          {getPlantSummaryLabel(plantId)}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-
-                  <label>
-                    Biome
-                    <select value={selectedBiome} onChange={(event) => setSelectedBiome(event.target.value as "desert" | "plains" | "rainforest")}>
-                      <option value="desert">{BIOME_LABELS.desert}</option>
-                      <option value="plains">{BIOME_LABELS.plains}</option>
-                      <option value="rainforest">{BIOME_LABELS.rainforest}</option>
-                    </select>
-                  </label>
 
                   {actionsExhausted ? <p>No actions left. Your turn will advance automatically.</p> : null}
-                  {!actionsExhausted ? <p style={{ marginTop: 8 }}>Available actions: Plant (choose biome), Activate Desert, Activate Plains, Activate Rainforest, Well, Draw, Harvest, Force Bloom, Pass.</p> : null}
+                  {!actionsExhausted ? <p style={{ marginTop: 8 }}>Hover a card in your hand to plant it in an open biome slot. Available actions: Plant, Activate Desert, Activate Plains, Activate Rainforest, Well, Draw, Harvest, Force Bloom, Pass.</p> : null}
+
+                  {!actionsExhausted && plantableBiomes.length === 0 ? <p>All biome rows are full. You cannot plant until a slot opens up.</p> : null}
 
                   <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                    <button
-                      onClick={() =>
-                        runAction("sow", async () => {
-                          if (!user?.uid) throw new Error("Missing authenticated user id.");
-                          if (!selectedPlantId) throw new Error("Select a plant to plant.");
-                          await sowPlantTx(gameId, user.uid, selectedPlantId, selectedBiome);
-                        })
-                      }
-                      disabled={
-                        Boolean(busyAction) ||
-                        actionsExhausted ||
-                        !selectedPlantId ||
-                        !currentPlant
-                      }
-                    >
-                      {busyAction === "sow" ? "Planting..." : `Plant in ${BIOME_LABELS[selectedBiome]}`}
-                    </button>
-
                     <button
                       onClick={() =>
                         runAction("activate-desert", async () => {
