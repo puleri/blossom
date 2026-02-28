@@ -1,4 +1,5 @@
 import { getPlantAbilityDescriptions, getPlantCardById } from "@/lib/game/cards/details";
+import { getPlantEngineProfile } from "@/lib/game/cards/engineProfiles";
 import { getPlantSchoolBorderColor } from "@/lib/game/cards/schools";
 
 interface HandPanelProps {
@@ -15,6 +16,7 @@ export function HandPanel({ hand }: HandPanelProps) {
         <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 4 }}>
           {hand.map((cardId) => {
             const card = getPlantCardById(cardId);
+            const profile = getPlantEngineProfile(cardId);
             const borderColor = getPlantSchoolBorderColor(cardId);
 
             return (
@@ -37,6 +39,14 @@ export function HandPanel({ hand }: HandPanelProps) {
                     </p>
                     <p style={{ margin: "6px 0", fontSize: 12 }}>
                       Decay {card.decayPerRound} · Upkeep {card.requiresUpkeep ? "Yes" : "No"}
+                    </p>
+                    {profile ? (
+                      <p style={{ margin: "6px 0", fontSize: 12 }}>
+                        {profile.biome.toUpperCase()} · L{profile.level} · Sun cost {profile.sunCost}/{profile.sunCapacity}
+                      </p>
+                    ) : null}
+                    <p style={{ margin: "6px 0", fontSize: 12 }}>
+                      Engine: {profile?.engineSummary}
                     </p>
                     <p style={{ margin: "6px 0", fontSize: 12 }}>
                       Ability: {getPlantAbilityDescriptions(card.abilities).join(" · ")}
