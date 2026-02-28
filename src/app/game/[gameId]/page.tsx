@@ -82,14 +82,6 @@ export default function GamePage({ params }: GamePageProps) {
     setSetupKeptPlantIds(currentPlayer.hand);
   }, [currentHandKey, currentPlayer]);
 
-  if (loading) {
-    return <main>Loading game...</main>;
-  }
-
-  if (!game) {
-    return <main>Game not found.</main>;
-  }
-
   async function handleStartGame() {
     if (!user?.uid) {
       setError("Cannot start game without an authenticated user id (uid).");
@@ -153,11 +145,6 @@ export default function GamePage({ params }: GamePageProps) {
     }
   }
 
-  const isMyTurn = Boolean(me?.id && game.activePlayerId === me.id);
-  const disableActionControls = loading || (game.phase === "turns" && !isMyTurn);
-  const remainingTurnActions = game.phase === "turns" ? Math.max(0, game.remainingActions ?? 0) : 0;
-  const actionsExhausted = game.phase === "turns" && isMyTurn && remainingTurnActions <= 0;
-
   const plantableBiomes = useMemo(() => {
     if (!currentPlayer) {
       return [] as BiomeName[];
@@ -173,6 +160,19 @@ export default function GamePage({ params }: GamePageProps) {
     () => Object.fromEntries(currentPlayer?.hand.map((plantId) => [plantId, plantableBiomes]) ?? []),
     [currentPlayer?.hand, plantableBiomes]
   );
+
+  if (loading) {
+    return <main>Loading game...</main>;
+  }
+
+  if (!game) {
+    return <main>Game not found.</main>;
+  }
+
+  const isMyTurn = Boolean(me?.id && game.activePlayerId === me.id);
+  const disableActionControls = loading || (game.phase === "turns" && !isMyTurn);
+  const remainingTurnActions = game.phase === "turns" ? Math.max(0, game.remainingActions ?? 0) : 0;
+  const actionsExhausted = game.phase === "turns" && isMyTurn && remainingTurnActions <= 0;
 
   const currentEvent = EVENT_CARDS.find((event) => event.id === game.currentEventId) ?? null;
   const nextEventForecast = game.nextEventForecast ?? null;
