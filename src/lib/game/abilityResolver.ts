@@ -221,7 +221,7 @@ const ROUND_END_RESOLVERS: Record<string, (context: RoundEndAbilityResolverConte
     }
 
     const nextSlots = [...slots];
-    nextSlots[expansionIndex] = { state: "seedling", plantId: ability.plantId };
+    nextSlots[expansionIndex] = { state: "grown", plantId: ability.plantId };
 
     return {
       player: {
@@ -233,7 +233,7 @@ const ROUND_END_RESOLVERS: Record<string, (context: RoundEndAbilityResolverConte
           abilityId: ability.abilityId,
           plantId: ability.plantId,
           slotIndex: ability.slotIndex,
-          message: `Triggered ${ability.abilityId}: spread to slot ${expansionIndex + 1} as a seedling.`
+          message: `Triggered ${ability.abilityId}: spread to slot ${expansionIndex + 1} as a transplanted plant.`
         }
       ]
     };

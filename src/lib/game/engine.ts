@@ -118,10 +118,6 @@ export function applyPlantDecayAndDeaths(player: PlayerDoc): PlayerDoc {
     const remainingWater = clampResource(Math.min(slotWater, card.waterCapacity) - upkeepDrain);
 
     if (hasRootRot) {
-      if (slot.state === "grown") {
-        return { state: "seedling", plantId: slot.plantId, water: remainingWater };
-      }
-
       return { state: "withered", plantId: null, water: 0 };
     }
 
@@ -129,28 +125,8 @@ export function applyPlantDecayAndDeaths(player: PlayerDoc): PlayerDoc {
       return { ...slot, water: remainingWater };
     }
 
-    if (slot.state === "seedling") {
-      if (slotWater >= HYDRATION_GROWTH_THRESHOLD) {
-        return { ...slot, state: "grown", water: remainingWater };
-      }
-
-      if (card.decayPerRound >= 2 && slotWater === 0) {
-        return { state: "withered", plantId: null, water: 0 };
-      }
-
-      return { ...slot, water: remainingWater };
-    }
-
-    if (slot.state === "grown") {
-      if (slotWater === 0 || (slotWater < HYDRATION_GROWTH_THRESHOLD && card.decayPerRound >= 2)) {
-        return { state: "withered", plantId: null, water: 0 };
-      }
-
-      if (slotWater < HYDRATION_GROWTH_THRESHOLD) {
-        return { ...slot, state: "seedling", water: remainingWater };
-      }
-
-      return { ...slot, water: remainingWater };
+    if (slotWater === 0 || (slotWater < HYDRATION_GROWTH_THRESHOLD && card.decayPerRound >= 2)) {
+      return { state: "withered", plantId: null, water: 0 };
     }
 
     return { ...slot, water: remainingWater };

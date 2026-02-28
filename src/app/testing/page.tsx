@@ -128,7 +128,7 @@ export default function TestingPage() {
         const next = [...previous];
         const updated = { ...next[meIndex] };
         const nextSlots = [...updated.gardenSlots];
-        nextSlots[selectedSlot] = { state: "seedling", plantId: plant.id };
+        nextSlots[selectedSlot] = { state: "grown", plantId: plant.id };
         updated.gardenSlots = nextSlots;
         updated.hand = updated.hand.filter((cardId) => cardId !== selectedPlantId);
         updated.resources = { ...updated.resources, seeds: updated.resources.seeds - plant.seedCost };
@@ -149,7 +149,7 @@ export default function TestingPage() {
 
           return {
             ...player,
-            gardenSlots: player.gardenSlots.map((slot) => (slot.state === "seedling" ? { ...slot, state: "grown" } : slot)),
+            gardenSlots: player.gardenSlots,
             resources: {
               ...player.resources,
               water: player.resources.water + 2
@@ -158,7 +158,7 @@ export default function TestingPage() {
         })
       );
 
-      addLog(`${me.displayName} went to the well, watered all seeds, and gained 2 water.`);
+      addLog(`${me.displayName} went to the well and gained 2 water.`);
     });
   }
 

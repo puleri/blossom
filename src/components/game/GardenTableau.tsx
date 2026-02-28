@@ -36,7 +36,6 @@ export function GardenTableau({ slots }: GardenTableauProps) {
 
                 return (
                   <div key={index} style={{ border: `2px solid ${borderColor}`, borderRadius: 4, padding: 8, minHeight: 130, background: "#fff" }}>
-                    <p style={{ margin: "6px 0" }}>State: {slot.state}</p>
                     {plant ? (
                       <>
                         <p style={{ margin: "6px 0" }}>Plant: {plant.name}</p>
@@ -55,7 +54,9 @@ export function GardenTableau({ slots }: GardenTableauProps) {
                           Ability: {getPlantAbilityDescriptions(plant.abilities).join(" · ")}
                         </p>
                       </>
-                    ) : null}
+                    ) : (
+                      <p style={{ margin: "6px 0", color: "#666" }}>{slot.state === "withered" ? "Withered" : "Empty"}</p>
+                    )}
                   </div>
                 );
               })}

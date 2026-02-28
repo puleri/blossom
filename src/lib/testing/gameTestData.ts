@@ -47,7 +47,7 @@ export const GAME_TEST_DATA: GameTestData = {
       hand: ["sunbloom", "rainfern", "petalburst"],
       gardenSlots: [
         { state: "grown", plantId: "sunbloom" },
-        { state: "seedling", plantId: "rainfern" },
+        { state: "grown", plantId: "rainfern" },
         { state: "empty", plantId: null },
         { state: "empty", plantId: null }
       ],
@@ -71,7 +71,7 @@ export const GAME_TEST_DATA: GameTestData = {
         { state: "grown", plantId: "thornivy" },
         { state: "withered", plantId: null },
         { state: "empty", plantId: null },
-        { state: "seedling", plantId: "moonpetal" }
+        { state: "grown", plantId: "moonpetal" }
       ],
       keptFromMulligan: true
     }

@@ -64,7 +64,6 @@ function normalizeGardenSlots(player: Omit<PlayerDoc, "id">): GardenSlot[] {
   });
 }
 
-
 function getBiomeSlots(biome: BiomeName) {
   return BIOME_SLOT_INDICES[biome];
 }
@@ -74,6 +73,15 @@ function getBiomeLevel(gardenSlots: GardenSlot[], biome: BiomeName) {
     const slot = gardenSlots[index];
     return slot && slot.state !== "empty" && slot.state !== "withered" && Boolean(slot.plantId);
   }).length;
+}
+
+
+function getCurrentEvent(game: Omit<GameDoc, "id">) {
+  if (!game.currentEventId) {
+    return null;
+  }
+
+  return EVENT_CARDS.find((event) => event.id === game.currentEventId) ?? null;
 }
 
 function getRemainingActions(game: Omit<GameDoc, "id">) {
@@ -107,10 +115,6 @@ function consumeTurnAction(
   }
 
   transaction.update(gameDocRef(gameId), { remainingActions });
-}
-
-function getCurrentEvent(game: Omit<GameDoc, "id">) {
-  return EVENT_CARDS.find((event) => event.id === game.currentEventId) ?? null;
 }
 
 function buildForecast(event: EventCard | null): EventForecast | null {
@@ -153,23 +157,6 @@ function applyEventToSinglePlayer(player: PlayerDoc, event: EventCard, value: nu
       [event.effectType]: Math.max(0, player.resources[event.effectType] + value)
     }
   };
-}
-
-function applyBloomWitherCheck(gardenSlots: GardenSlot[]): { gardenSlots: GardenSlot[]; withered: boolean } {
-  const grownIndices = gardenSlots
-    .map((slot, index) => ({ slot, index }))
-    .filter(({ slot }) => slot.state === "grown")
-    .map(({ index }) => index);
-
-  if (grownIndices.length === 0 || Math.random() >= 0.5) {
-    return { gardenSlots, withered: false };
-  }
-
-  const randomIndex = grownIndices[Math.floor(Math.random() * grownIndices.length)];
-  const nextSlots = [...gardenSlots];
-  nextSlots[randomIndex] = { state: "withered", plantId: null, water: 0 };
-
-  return { gardenSlots: nextSlots, withered: true };
 }
 
 function resolveNextTurnState(game: Omit<GameDoc, "id">, players: QueryDocumentSnapshot<Omit<PlayerDoc, "id">>[], currentPlayerId: string) {
@@ -404,7 +391,7 @@ export async function sowPlantTx(gameId: string, uid: string, plantId: string, b
     const plant = getPlantCardById(plantId);
     assert(plant, "Plant card definition not found.");
     const nextSlots = normalizeGardenSlots(playerData);
-    nextSlots[slotIndex] = { state: "seedling", plantId: plant.id, water: 0 };
+    nextSlots[slotIndex] = { state: "grown", plantId: plant.id, water: 0 };
 
     transaction.update(playerDocRef(gameId, playerSnap.id), {
       hand: playerData.hand.filter((cardId) => cardId !== plantId),
@@ -559,7 +546,6 @@ export async function goToWellTx(gameId: string, uid: string, slotIndices: numbe
   });
 }
 
-
 export async function riskyOverwaterTx(gameId: string, uid: string, slotIndex: number) {
   const players = await getOrderedPlayers(gameId);
 
@@ -696,99 +682,6 @@ export async function tradeWaterForSeedsTx(gameId: string, uid: string) {
   });
 }
 
-export async function compostWitheredTx(gameId: string, uid: string, slotIndex: number) {
-  const players = await getOrderedPlayers(gameId);
-
-  return runTransaction(firestore, async (transaction) => {
-    const gameSnap = await transaction.get(gameDocRef(gameId));
-    assert(gameSnap.exists(), "Game not found.");
-    const gameData = gameSnap.data();
-    requireTurnPhase(gameData);
-
-    const playerSnap = getPlayerByUid(players, uid);
-    assert(gameData.activePlayerId === playerSnap.id, "Only the active player can perform turn actions.");
-    requireActionsRemaining(gameData);
-
-    const playerData = playerSnap.data();
-    assert(slotIndex >= 0 && slotIndex < playerData.gardenSlots.length, "Invalid garden slot.");
-    const nextSlots = normalizeGardenSlots(playerData);
-    assert(nextSlots[slotIndex].state === "withered", "Select a withered slot to compost.");
-
-    const currentEvent = getCurrentEvent(gameData);
-    const bugPenalty = Math.random() < 0.35 ? 1 : 0;
-    const seedBonus = currentEvent?.id === "seedBurst" ? 1 : 0;
-    const flowerBonus = currentEvent?.id === "pollination" ? 1 : 0;
-    const seedsGained = 1 + seedBonus;
-    const flowersGained = 1 + flowerBonus;
-
-    nextSlots[slotIndex] = { state: "empty", plantId: null, water: 0 };
-
-    transaction.update(playerDocRef(gameId, playerSnap.id), {
-      gardenSlots: nextSlots,
-      resources: {
-        ...playerData.resources,
-        seeds: playerData.resources.seeds + seedsGained,
-        flowers: playerData.resources.flowers + flowersGained,
-        bugs: playerData.resources.bugs + bugPenalty
-      }
-    });
-
-    consumeTurnAction(transaction, gameId, gameData, players, playerSnap.id, playerData.displayName);
-
-    appendLog(transaction, gameId, {
-      message: `${playerData.displayName} composted withered slot ${slotIndex + 1} (stake: permanently clear the slot) and gained +${seedsGained} seed${
-        seedsGained === 1 ? "" : "s"
-      }/+${flowersGained} flower${flowersGained === 1 ? "" : "s"}${bugPenalty ? ", but attracted +1 bug" : " with no bug penalty"}.`,
-      playerId: playerSnap.id,
-      type: "action"
-    });
-  });
-}
-
-export async function gambleBloomTx(gameId: string, uid: string) {
-  const players = await getOrderedPlayers(gameId);
-
-  return runTransaction(firestore, async (transaction) => {
-    const gameSnap = await transaction.get(gameDocRef(gameId));
-    assert(gameSnap.exists(), "Game not found.");
-    const gameData = gameSnap.data();
-    requireTurnPhase(gameData);
-
-    const playerSnap = getPlayerByUid(players, uid);
-    assert(gameData.activePlayerId === playerSnap.id, "Only the active player can perform turn actions.");
-    requireActionsRemaining(gameData);
-
-    const playerData = playerSnap.data();
-    const waterCost = 2;
-    assert(playerData.resources.water >= waterCost, "Not enough water to gamble.");
-
-    const currentEvent = getCurrentEvent(gameData);
-    const roll = Math.floor(Math.random() * 5);
-    const eventFlowerBonus = currentEvent?.id === "pollination" ? 1 : 0;
-    const flowersGained = roll + eventFlowerBonus;
-    const bugPenalty = roll <= 1 ? 1 + (currentEvent?.id === "infestation" ? 1 : 0) : 0;
-
-    transaction.update(playerDocRef(gameId, playerSnap.id), {
-      resources: {
-        ...playerData.resources,
-        water: playerData.resources.water - waterCost,
-        flowers: playerData.resources.flowers + flowersGained,
-        bugs: playerData.resources.bugs + bugPenalty
-      }
-    });
-
-    consumeTurnAction(transaction, gameId, gameData, players, playerSnap.id, playerData.displayName);
-
-    appendLog(transaction, gameId, {
-      message: `${playerData.displayName} gambled ${waterCost} water for a bloom roll (rolled ${roll}) and gained ${flowersGained} flower${
-        flowersGained === 1 ? "" : "s"
-      }${bugPenalty ? `, but paid ${bugPenalty} bug penalty` : ", with no bug penalty"}.`,
-      playerId: playerSnap.id,
-      type: "action"
-    });
-  });
-}
-
 export async function harvestNowTx(gameId: string, uid: string) {
   const players = await getOrderedPlayers(gameId);
 
@@ -839,32 +732,15 @@ export async function forceBloomTx(gameId: string, uid: string) {
     assert(playerData.resources.buds > 0, "No buds available to bloom.");
 
     const bloomed = forceBloom({ id: playerSnap.id, ...playerData });
-    const riskRoll = Math.floor(Math.random() * 3);
-    const nextResources = { ...bloomed.resources };
-    let nextSlots = normalizeGardenSlots(playerData);
-    let riskMessage = "with no side effects";
-
-    if (riskRoll === 0) {
-      nextResources.water = Math.max(0, nextResources.water - 1);
-      riskMessage = "but lost 1 water";
-    } else if (riskRoll === 1) {
-      nextResources.bugs += 1;
-      riskMessage = "but attracted +1 bug";
-    } else {
-      const witherResult = applyBloomWitherCheck(nextSlots);
-      nextSlots = witherResult.gardenSlots;
-      riskMessage = witherResult.withered ? "and a grown plant withered" : "and passed the wither check";
-    }
 
     transaction.update(playerDocRef(gameId, playerSnap.id), {
-      gardenSlots: nextSlots,
-      resources: nextResources
+      resources: bloomed.resources
     });
 
     consumeTurnAction(transaction, gameId, gameData, players, playerSnap.id, playerData.displayName);
 
     appendLog(transaction, gameId, {
-      message: `${playerData.displayName} forced ${playerData.resources.buds} bud${playerData.resources.buds === 1 ? "" : "s"} to bloom into flowers ${riskMessage}.`,
+      message: `${playerData.displayName} forced ${playerData.resources.buds} bud${playerData.resources.buds === 1 ? "" : "s"} to bloom into flowers.`,
       playerId: playerSnap.id,
       type: "action"
     });
