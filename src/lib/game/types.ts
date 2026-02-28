@@ -4,6 +4,8 @@ export type Phase = "lobby" | "setup" | "turns" | "upkeep" | "ended";
 
 export type GardenSlotState = "empty" | "seedling" | "grown" | "withered";
 
+export type BiomeName = "desert" | "plains" | "rainforest";
+
 export interface GardenSlot {
   state: GardenSlotState;
   plantId: string | null;
