@@ -21,7 +21,7 @@ export function HandPanel({ hand }: HandPanelProps) {
               <article
                 key={cardId}
                 style={{
-                  border: `2px solid ${borderColor}`,
+                  border: `4px solid ${borderColor}`,
                   borderRadius: 6,
                   padding: 8,
                   minWidth: 180,
