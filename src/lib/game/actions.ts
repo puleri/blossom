@@ -28,7 +28,18 @@ import {
   resolveRoundEndUpkeepStartAbilities
 } from "@/lib/game/engine";
 import { gameDocRef, gameLogColRef, playerDocRef, playersColRef } from "@/lib/game/refs";
-import type { BiomeName, EventCard, EventForecast, GameDoc, GameLogEntryDoc, GardenSlot, GardenSlotState, PlayerDoc, UpkeepEventResponse } from "@/lib/game/types";
+import type {
+  BiomeActivationAnnouncement,
+  BiomeName,
+  EventCard,
+  EventForecast,
+  GameDoc,
+  GameLogEntryDoc,
+  GardenSlot,
+  GardenSlotState,
+  PlayerDoc,
+  UpkeepEventResponse
+} from "@/lib/game/types";
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message);
@@ -423,11 +434,14 @@ export async function activateBiomeTx(gameId: string, uid: string, biome: BiomeN
 
     const playerData = playerSnap.data();
     let resolvedPlayer: PlayerDoc = { id: playerSnap.id, ...playerData };
+    const initialLevel = getBiomeLevel(normalizeGardenSlots(resolvedPlayer), biome);
+    assert(initialLevel > 0, `${BIOME_LABELS[biome]} has no planted cards to activate.`);
+
     const biomeSlots = [...getBiomeSlots(biome)].sort((a, b) => b - a);
     const activationLogs: string[] = [];
 
     for (const slotIndex of biomeSlots) {
-      const slot = resolvedPlayer.gardenSlots[slotIndex];
+      const slot = normalizeGardenSlots(resolvedPlayer)[slotIndex];
       if (!slot || slot.state === "empty" || slot.state === "withered" || !slot.plantId) {
         continue;
       }
@@ -441,8 +455,12 @@ export async function activateBiomeTx(gameId: string, uid: string, biome: BiomeN
       }
     }
 
-    const level = getBiomeLevel(normalizeGardenSlots(resolvedPlayer), biome);
-    assert(level > 0, `${BIOME_LABELS[biome]} has no planted cards to activate.`);
+    const announcement: BiomeActivationAnnouncement = {
+      id: doc(collection(firestore, "games")).id,
+      playerId: playerSnap.id,
+      biome,
+      messages: activationLogs.length > 0 ? activationLogs : ["No activatable abilities were found in this biome."]
+    };
 
     transaction.update(playerDocRef(gameId, playerSnap.id), {
       resources: resolvedPlayer.resources,
@@ -450,10 +468,14 @@ export async function activateBiomeTx(gameId: string, uid: string, biome: BiomeN
       gardenSlots: normalizeGardenSlots(resolvedPlayer)
     });
 
+    transaction.update(gameDocRef(gameId), {
+      biomeActivationAnnouncement: announcement
+    });
+
     consumeTurnAction(transaction, gameId, gameData, players, playerSnap.id, playerData.displayName);
 
     appendLog(transaction, gameId, {
-      message: `${playerData.displayName} activated ${BIOME_LABELS[biome]} (level ${level}) from right to left.`,
+      message: `${playerData.displayName} activated ${BIOME_LABELS[biome]} (level ${initialLevel}) from right to left.`,
       playerId: playerSnap.id,
       type: "action"
     });
