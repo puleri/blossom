@@ -10,7 +10,7 @@ import {
   type Transaction
 } from "firebase/firestore";
 import { firestore } from "@/lib/firestore";
-import { ACTIONS_PER_TURN, GARDEN_SLOT_DEFAULT, ROUNDS_TOTAL, SETUP_HAND_SIZE, SETUP_STARTING_RESOURCES } from "@/lib/game/constants";
+import { ACTIONS_PER_TURN, BIOME_LABELS, BIOME_SLOT_INDICES, GARDEN_SLOT_DEFAULT, ROUNDS_TOTAL, SETUP_HAND_SIZE, SETUP_STARTING_RESOURCES } from "@/lib/game/constants";
 import { getPlantCardById, getPlantDisplayName } from "@/lib/game/cards/details";
 import { EVENT_CARDS } from "@/lib/game/cards/events";
 import { PLANT_CARD_IDS } from "@/lib/game/cards/plants";
@@ -28,7 +28,7 @@ import {
   resolveRoundEndUpkeepStartAbilities
 } from "@/lib/game/engine";
 import { gameDocRef, gameLogColRef, playerDocRef, playersColRef } from "@/lib/game/refs";
-import type { EventCard, EventForecast, GameDoc, GameLogEntryDoc, GardenSlot, GardenSlotState, PlayerDoc, UpkeepEventResponse } from "@/lib/game/types";
+import type { BiomeName, EventCard, EventForecast, GameDoc, GameLogEntryDoc, GardenSlot, GardenSlotState, PlayerDoc, UpkeepEventResponse } from "@/lib/game/types";
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message);
@@ -62,6 +62,18 @@ function normalizeGardenSlots(player: Omit<PlayerDoc, "id">): GardenSlot[] {
 
     return { state: slot.state, plantId: slot.plantId ?? null, water: Math.max(0, slot.water ?? 0) };
   });
+}
+
+
+function getBiomeSlots(biome: BiomeName) {
+  return BIOME_SLOT_INDICES[biome];
+}
+
+function getBiomeLevel(gardenSlots: GardenSlot[], biome: BiomeName) {
+  return getBiomeSlots(biome).filter((index) => {
+    const slot = gardenSlots[index];
+    return slot && slot.state !== "empty" && slot.state !== "withered" && Boolean(slot.plantId);
+  }).length;
 }
 
 function getRemainingActions(game: Omit<GameDoc, "id">) {
@@ -368,7 +380,7 @@ export async function submitSetupKeepTx(
   });
 }
 
-export async function sowPlantTx(gameId: string, uid: string, plantId: string, slotIndex: number) {
+export async function sowPlantTx(gameId: string, uid: string, plantId: string, biome: BiomeName) {
   const players = await getOrderedPlayers(gameId);
 
   return runTransaction(firestore, async (transaction) => {
@@ -382,9 +394,10 @@ export async function sowPlantTx(gameId: string, uid: string, plantId: string, s
     requireActionsRemaining(gameData);
 
     const playerData = playerSnap.data();
-    assert(slotIndex >= 0 && slotIndex < playerData.gardenSlots.length, "Invalid garden slot.");
     const gardenSlots = normalizeGardenSlots(playerData);
-    assert(gardenSlots[slotIndex].state === "empty", "Selected garden slot is not empty.");
+    const biomeSlots = getBiomeSlots(biome);
+    const slotIndex = biomeSlots.find((index) => gardenSlots[index]?.state === "empty");
+    assert(slotIndex !== undefined, `${BIOME_LABELS[biome]} has no empty planting slots.`);
 
     assert(playerData.hand.includes(plantId), "Plant not found in hand.");
 
@@ -398,27 +411,86 @@ export async function sowPlantTx(gameId: string, uid: string, plantId: string, s
       gardenSlots: nextSlots
     });
 
-    const remainingActions = getRemainingActions(gameData) - 1;
-    if (remainingActions <= 0) {
-      const nextTurn = resolveNextTurnState(gameData, players, playerSnap.id);
-      transaction.update(gameDocRef(gameId), nextTurn.nextState);
-      appendLog(transaction, gameId, {
-        message: nextTurn.wrapped
-          ? `Round ${gameData.round} turns complete. Entering upkeep.`
-          : `${playerData.displayName} exhausted their actions. Turn auto-ended.`,
-        playerId: playerSnap.id,
-        type: "action"
-      });
-    } else {
-      transaction.update(gameDocRef(gameId), { remainingActions });
-    }
+    consumeTurnAction(transaction, gameId, gameData, players, playerSnap.id, playerData.displayName);
 
     appendLog(transaction, gameId, {
-      message: `${playerData.displayName} planted ${plant.name} in slot ${slotIndex + 1}.`,
+      message: `${playerData.displayName} planted ${plant.name} in ${BIOME_LABELS[biome]} (leftmost open slot).`,
       playerId: playerSnap.id,
       type: "action"
     });
   });
+}
+
+export async function activateBiomeTx(gameId: string, uid: string, biome: BiomeName) {
+  const players = await getOrderedPlayers(gameId);
+
+  return runTransaction(firestore, async (transaction) => {
+    const gameSnap = await transaction.get(gameDocRef(gameId));
+    assert(gameSnap.exists(), "Game not found.");
+    const gameData = gameSnap.data();
+    requireTurnPhase(gameData);
+
+    const playerSnap = getPlayerByUid(players, uid);
+    assert(gameData.activePlayerId === playerSnap.id, "Only the active player can perform turn actions.");
+    requireActionsRemaining(gameData);
+
+    const playerData = playerSnap.data();
+    let resolvedPlayer: PlayerDoc = { id: playerSnap.id, ...playerData };
+    const biomeSlots = [...getBiomeSlots(biome)].sort((a, b) => b - a);
+    const activationLogs: string[] = [];
+
+    for (const slotIndex of biomeSlots) {
+      const slot = resolvedPlayer.gardenSlots[slotIndex];
+      if (!slot || slot.state === "empty" || slot.state === "withered" || !slot.plantId) {
+        continue;
+      }
+
+      const resolved = activatePlantAbilityForTurn(resolvedPlayer, slotIndex, gameData.round);
+      resolvedPlayer = resolved.player;
+      if (resolved.logs.length === 0) {
+        activationLogs.push(`slot ${slotIndex + 1}: no activatable ability.`);
+      } else {
+        resolved.logs.forEach((entry) => activationLogs.push(`slot ${entry.slotIndex + 1}: ${entry.message}`));
+      }
+    }
+
+    const level = getBiomeLevel(normalizeGardenSlots(resolvedPlayer), biome);
+    assert(level > 0, `${BIOME_LABELS[biome]} has no planted cards to activate.`);
+
+    transaction.update(playerDocRef(gameId, playerSnap.id), {
+      resources: resolvedPlayer.resources,
+      abilityUsage: resolvedPlayer.abilityUsage ?? {},
+      gardenSlots: normalizeGardenSlots(resolvedPlayer)
+    });
+
+    consumeTurnAction(transaction, gameId, gameData, players, playerSnap.id, playerData.displayName);
+
+    appendLog(transaction, gameId, {
+      message: `${playerData.displayName} activated ${BIOME_LABELS[biome]} (level ${level}) from right to left.`,
+      playerId: playerSnap.id,
+      type: "action"
+    });
+
+    activationLogs.forEach((message) => {
+      appendLog(transaction, gameId, {
+        message: `${playerData.displayName} ${BIOME_LABELS[biome]} ${message}`,
+        playerId: playerSnap.id,
+        type: "action"
+      });
+    });
+  });
+}
+
+export async function activateDesertBiomeTx(gameId: string, uid: string) {
+  return activateBiomeTx(gameId, uid, "desert");
+}
+
+export async function activatePlainsBiomeTx(gameId: string, uid: string) {
+  return activateBiomeTx(gameId, uid, "plains");
+}
+
+export async function activateRainforestBiomeTx(gameId: string, uid: string) {
+  return activateBiomeTx(gameId, uid, "rainforest");
 }
 
 export async function goToWellTx(gameId: string, uid: string, slotIndices: number[] = []) {

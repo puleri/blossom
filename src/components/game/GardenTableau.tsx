@@ -1,44 +1,60 @@
+import { BIOME_LABELS, BIOME_SLOT_INDICES } from "@/lib/game/constants";
 import { getPlantAbilityDescriptions, getPlantCardById } from "@/lib/game/cards/details";
 import { getPlantSchoolBorderColor } from "@/lib/game/cards/schools";
-import type { GardenSlot } from "@/lib/game/types";
+import type { BiomeName, GardenSlot } from "@/lib/game/types";
 
 interface GardenTableauProps {
   slots: GardenSlot[];
 }
 
+const BIOME_BACKGROUND_COLORS: Record<BiomeName, string> = {
+  desert: "#f4d7a1",
+  plains: "#cde9a3",
+  rainforest: "#9fd8b6"
+};
+
 export function GardenTableau({ slots }: GardenTableauProps) {
-  const totalSlots = 15;
+  const biomes: BiomeName[] = ["desert", "plains", "rainforest"];
 
   return (
     <section>
       <h2>Garden Tableau</h2>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(5, minmax(120px, 1fr))", gap: 8 }}>
-        {Array.from({ length: totalSlots }, (_, index) => {
-          const slot = slots[index] ?? { state: "empty", plantId: null };
-          const plant = slot.plantId ? getPlantCardById(slot.plantId) : null;
-          const borderColor = slot.plantId ? getPlantSchoolBorderColor(slot.plantId) : "#ccc";
+      <div style={{ display: "grid", gap: 10 }}>
+        {biomes.map((biome) => (
+          <div
+            key={biome}
+            style={{ backgroundColor: BIOME_BACKGROUND_COLORS[biome], borderRadius: 8, padding: 8 }}
+          >
+            <p style={{ margin: "0 0 8px 0", fontWeight: 600 }}>{BIOME_LABELS[biome]}</p>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(5, minmax(120px, 1fr))", gap: 8 }}>
+              {BIOME_SLOT_INDICES[biome].map((index) => {
+                const slot = slots[index] ?? { state: "empty", plantId: null };
+                const plant = slot.plantId ? getPlantCardById(slot.plantId) : null;
+                const borderColor = slot.plantId ? getPlantSchoolBorderColor(slot.plantId) : "#ccc";
 
-          return (
-            <div key={index} style={{ border: `2px solid ${borderColor}`, borderRadius: 4, padding: 8, minHeight: 130 }}>
-              <strong>Slot {index + 1}</strong>
-              <p style={{ margin: "6px 0" }}>State: {slot.state}</p>
-              {plant ? (
-                <>
-                  <p style={{ margin: "6px 0" }}>Plant: {plant.name}</p>
-                  <p style={{ margin: "6px 0", fontSize: 12 }}>
-                    Pts {plant.points} · Water {plant.waterCapacity}
-                  </p>
-                  <p style={{ margin: "6px 0", fontSize: 12 }}>
-                    Decay {plant.decayPerRound} · Upkeep {plant.requiresUpkeep ? "Yes" : "No"}
-                  </p>
-                  <p style={{ margin: "6px 0", fontSize: 12 }}>
-                    Ability: {getPlantAbilityDescriptions(plant.abilities).join(" · ")}
-                  </p>
-                </>
-              ) : null}
+                return (
+                  <div key={index} style={{ border: `2px solid ${borderColor}`, borderRadius: 4, padding: 8, minHeight: 130, background: "#fff" }}>
+                    <p style={{ margin: "6px 0" }}>State: {slot.state}</p>
+                    {plant ? (
+                      <>
+                        <p style={{ margin: "6px 0" }}>Plant: {plant.name}</p>
+                        <p style={{ margin: "6px 0", fontSize: 12 }}>
+                          Pts {plant.points} · Water {plant.waterCapacity}
+                        </p>
+                        <p style={{ margin: "6px 0", fontSize: 12 }}>
+                          Decay {plant.decayPerRound} · Upkeep {plant.requiresUpkeep ? "Yes" : "No"}
+                        </p>
+                        <p style={{ margin: "6px 0", fontSize: 12 }}>
+                          Ability: {getPlantAbilityDescriptions(plant.abilities).join(" · ")}
+                        </p>
+                      </>
+                    ) : null}
+                  </div>
+                );
+              })}
             </div>
-          );
-        })}
+          </div>
+        ))}
       </div>
     </section>
   );

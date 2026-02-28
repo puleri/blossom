@@ -1,6 +1,7 @@
 "use client";
 
 import { use, useEffect, useMemo, useState } from "react";
+import { BIOME_LABELS } from "@/lib/game/constants";
 import { useRouter } from "next/navigation";
 import { GameHeader } from "@/components/game/GameHeader";
 import { PlayerList } from "@/components/game/PlayerList";
@@ -9,6 +10,9 @@ import { HandPanel } from "@/components/game/HandPanel";
 import { GameLog } from "@/components/game/GameLog";
 import { leaveGame, startGameFromLobby } from "@/lib/game/gameService";
 import {
+  activateDesertBiomeTx,
+  activatePlainsBiomeTx,
+  activateRainforestBiomeTx,
   compostWitheredTx,
   drawPlantCardTx,
   forceBloomTx,
@@ -44,7 +48,7 @@ export default function GamePage({ params }: GamePageProps) {
   const [error, setError] = useState<string | null>(null);
   const [setupKeptPlantIds, setSetupKeptPlantIds] = useState<string[]>([]);
   const [selectedPlantId, setSelectedPlantId] = useState<string>("");
-  const [selectedSlot, setSelectedSlot] = useState<number>(0);
+  const [selectedBiome, setSelectedBiome] = useState<"desert" | "plains" | "rainforest">("desert");
   const [selectedWitheredSlot, setSelectedWitheredSlot] = useState<number>(0);
   const [upkeepResponseChoice, setUpkeepResponseChoice] = useState<"mitigate" | "amplify" | "none">("none");
   const [upkeepResponseResource, setUpkeepResponseResource] = useState<"water">("water");
@@ -324,13 +328,11 @@ export default function GamePage({ params }: GamePageProps) {
               </label>
 
               <label>
-                Slot
-                <select value={selectedSlot} onChange={(event) => setSelectedSlot(Number(event.target.value))}>
-                  {currentPlayer.gardenSlots.map((_, index) => (
-                    <option key={`slot-${index}`} value={index}>
-                      Slot {index + 1}
-                    </option>
-                  ))}
+                Biome
+                <select value={selectedBiome} onChange={(event) => setSelectedBiome(event.target.value as "desert" | "plains" | "rainforest")}>
+                  <option value="desert">{BIOME_LABELS.desert}</option>
+                  <option value="plains">{BIOME_LABELS.plains}</option>
+                  <option value="rainforest">{BIOME_LABELS.rainforest}</option>
                 </select>
               </label>
 
@@ -346,7 +348,7 @@ export default function GamePage({ params }: GamePageProps) {
               </label>
 
               {actionsExhausted ? <p>No actions left. Your turn will advance automatically.</p> : null}
-              {!actionsExhausted ? <p style={{ marginTop: 8 }}>Available actions: Plant, Well, Draw, Compost Withered, Gamble Bloom, Harvest, Force Bloom, Pass.</p> : null}
+              {!actionsExhausted ? <p style={{ marginTop: 8 }}>Available actions: Plant (choose biome), Activate Desert, Activate Plains, Activate Rainforest, Well, Draw, Compost Withered, Gamble Bloom, Harvest, Force Bloom, Pass.</p> : null}
 
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                 <button
@@ -354,7 +356,7 @@ export default function GamePage({ params }: GamePageProps) {
                     runAction("sow", async () => {
                       if (!user?.uid) throw new Error("Missing authenticated user id.");
                       if (!selectedPlantId) throw new Error("Select a plant to plant.");
-                      await sowPlantTx(gameId, user.uid, selectedPlantId, selectedSlot);
+                      await sowPlantTx(gameId, user.uid, selectedPlantId, selectedBiome);
                     })
                   }
                   disabled={
@@ -364,7 +366,43 @@ export default function GamePage({ params }: GamePageProps) {
                     !currentPlant
                   }
                 >
-                  {busyAction === "sow" ? "Planting..." : "Plant"}
+                  {busyAction === "sow" ? "Planting..." : `Plant in ${BIOME_LABELS[selectedBiome]}`}
+                </button>
+
+                <button
+                  onClick={() =>
+                    runAction("activate-desert", async () => {
+                      if (!user?.uid) throw new Error("Missing authenticated user id.");
+                      await activateDesertBiomeTx(gameId, user.uid);
+                    })
+                  }
+                  disabled={Boolean(busyAction) || actionsExhausted}
+                >
+                  {busyAction === "activate-desert" ? "Activating..." : "Activate Desert biome"}
+                </button>
+
+                <button
+                  onClick={() =>
+                    runAction("activate-plains", async () => {
+                      if (!user?.uid) throw new Error("Missing authenticated user id.");
+                      await activatePlainsBiomeTx(gameId, user.uid);
+                    })
+                  }
+                  disabled={Boolean(busyAction) || actionsExhausted}
+                >
+                  {busyAction === "activate-plains" ? "Activating..." : "Activate Plains biome"}
+                </button>
+
+                <button
+                  onClick={() =>
+                    runAction("activate-rainforest", async () => {
+                      if (!user?.uid) throw new Error("Missing authenticated user id.");
+                      await activateRainforestBiomeTx(gameId, user.uid);
+                    })
+                  }
+                  disabled={Boolean(busyAction) || actionsExhausted}
+                >
+                  {busyAction === "activate-rainforest" ? "Activating..." : "Activate Rainforest biome"}
                 </button>
 
                 <button
