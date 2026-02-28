@@ -1,5 +1,5 @@
 import { BIOME_LABELS, BIOME_SLOT_INDICES } from "@/lib/game/constants";
-import { getPlantAbilityDescriptions, getPlantCardById } from "@/lib/game/cards/details";
+import { getPlantCardById } from "@/lib/game/cards/details";
 import { getPlantEngineProfile } from "@/lib/game/cards/engineProfiles";
 import { getPlantSchoolBorderColor } from "@/lib/game/cards/schools";
 import type { BiomeName, GardenSlot } from "@/lib/game/types";
@@ -50,9 +50,6 @@ export function GardenTableau({ slots }: GardenTableauProps) {
                             L{profile.level} · Sun {profile.sunCost}/{profile.sunCapacity} · {profile.engineSummary}
                           </p>
                         ) : null}
-                        <p style={{ margin: "6px 0", fontSize: 12 }}>
-                          Ability: {getPlantAbilityDescriptions(plant.abilities).join(" · ")}
-                        </p>
                       </>
                     ) : (
                       <p style={{ margin: "6px 0", color: "#666" }}>{slot.state === "withered" ? "Withered" : "Empty"}</p>

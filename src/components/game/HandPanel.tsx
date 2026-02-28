@@ -1,5 +1,5 @@
 import { ReactNode, useState } from "react";
-import { getPlantAbilityDescriptions, getPlantCardById } from "@/lib/game/cards/details";
+import { getPlantCardById } from "@/lib/game/cards/details";
 import { getPlantEngineProfile } from "@/lib/game/cards/engineProfiles";
 import { getPlantSchoolBorderColor } from "@/lib/game/cards/schools";
 import { BIOME_LABELS } from "@/lib/game/constants";
@@ -69,9 +69,6 @@ export function HandPanel({ hand, canPlant = false, busyAction = null, available
                     ) : null}
                     <p style={{ margin: "6px 0", fontSize: 12 }}>
                       Engine: {profile?.engineSummary}
-                    </p>
-                    <p style={{ margin: "6px 0", fontSize: 12 }}>
-                      Ability: {getPlantAbilityDescriptions(card.abilities).join(" · ")}
                     </p>
 
                     {canPlant && onPlantFromHand ? (

@@ -1,63 +1,5 @@
 import { PLANT_CARDS } from "@/lib/game/cards/plants";
 
-const ABILITY_DESCRIPTION_MAP: Record<string, string> = {
-  fruit_drop_round_end: "Round end: gain bonus flowers from ripe fruit.",
-  ground_cover_passive: "Passive: reduces upkeep pressure while established.",
-  water_retention: "Passive: holds water efficiently and resists drying out.",
-  reservoir_action_once_per_round: "Action (once per round): store extra water for later use.",
-  pollinator_magnet_round_end: "Round end: attracts pollinators and gains flowers.",
-  trellis_chain_round_end: "Round end: gains value when supported by nearby growth.",
-  companion_planting_passive: "Passive: improves neighboring plants when planted together.",
-  bloom_prestige_round_end: "Round end: scores extra prestige from blooms.",
-  nectar_economy_round_end: "Round end: converts nectar production into bonus points.",
-  infestation_proof_event: "Infestation reaction: gains +1 bug token during pest events.",
-  shared_hunt_round_end: "Round end: each adjacent Carnivorous plant adds +1 bug token.",
-  sticky_trap_action_once_per_round: "Action (once per round): spend 1 bug token to gain 1 seed.",
-  venomous_bloom_round_end: "Round end: if this flowers, gain +2 bug tokens.",
-  water_feast_round_end: "Round end: if you have at least 1 bug token, gain +1 water.",
-  predatory_pressure_round_end:
-    "Round end: if you have 2+ bug tokens, apply predatory pressure (gain +1 seed).",
-  infestation_catalyst_event: "Infestation reaction: gain +1 additional bug token.",
-  dark_canopy_round_end: "Round end: if adjacent to 2+ Carnivorous plants, gain +2 bug tokens.",
-  digest_action: "Action: spend 2 bug tokens to gain +1 flower token.",
-  feeding_frenzy_round_end: "Round end: if bug pressure is high (3+ bugs), gain +2 bug tokens.",
-  web_of_fangs_round_end: "Round end: adjacent Carnivorous plants that flower grant +1 bug token each.",
-  sovereign_predator_game_end:
-    "Game end: +1 point per bug token and +2 points per Carnivorous plant in your garden.",
-  spreading_runner_round_end: "Round end: transplant a runner into an empty slot.",
-  spread_enters_with_zero_water: "Spreads start dry and should be watered to sustain engine output.",
-  modest_bloom_round_end: "Round end: if full water, gain 1 flower token.",
-  fertile_bloom_round_end: "Round end: if this flowers, gain 1 seed.",
-  lunar_hydration_round_end: "Round end: if this flowers, gain 1 water.",
-  shared_radiance_passive:
-    "Passive: adjacent plants need 1 less water to count as full for flowering (minimum 1 water).",
-  royal_bloom_round_end: "Round end: if this flowers, gain 2 flower tokens.",
-  seed_conversion_round_end: "Round end: may convert 2 flower tokens into 1 seed.",
-  pollinator_surge_round_end: "Round end: if two or more plants flower, gain 1 additional flower token.",
-  chorus_effect_round_end: "Round end: if at least 3 plants flower, gain 2 seeds.",
-  crystal_bloom_round_end: "Round end: if this flowers while full, gain 1 flower token and 1 water.",
-  bloom_transmutation_action_once_per_round:
-    "Action (once per round): spend 1 flower token to gain 1 water and 1 seed.",
-  unified_bloom_round_end: "Round end: if full, adjacent plants gain 1 water before flowering checks.",
-  grand_bloom_event_round_end: "Round end: if 4 or more plants flower, gain 3 flower tokens and 2 seeds.",
-  minimalist_game_end: "Game end: gain +1 point if this plant never held more than 1 water.",
-  scarcity_flower_round_end: "Round end: if this plant has exactly 1 water, gain 1 flower token.",
-  dry_resistance_event: "Event reaction: loses 1 less water during Dry Heat events (minimum 0).",
-  redistribution_round_end: "Round end: move 1 water from any plant to another plant in your garden.",
-  heat_thrives_event: "Event reaction: during Dry Heat, gain +2 seeds.",
-  oppressive_shade_round_end: "Round end: if this plant has 0 water and survives, gain 1 seed.",
-  low_water_colony_game_end: "Game end: gain +1 point if adjacent to another plant with 1 or less water.",
-  evaporation_pressure_round_end:
-    "Round end: if this plant has 0 water, each opponent full-water plant loses 1 water.",
-  false_spring_game_end: "Game end: gain +2 points if a Rainstorm event occurred this game.",
-  deep_roots_passive:
-    "Passive: may hold 1 overflow water above capacity; overflow is immune to event-based removal.",
-  bloom_through_ash_round_end:
-    "Round end: when flowering below half water, gain +2 flower tokens instead of 1.",
-  sovereign_of_scarcity_game_end:
-    "Game end: gain +1 point per plant at 1 or less water and +2 points per revealed Dry Heat event."
-};
-
 const PLANT_CARD_MAP = new Map(PLANT_CARDS.map((card) => [card.id, card]));
 
 export function getPlantCardById(plantId: string) {
@@ -77,6 +19,6 @@ export function getPlantSummaryLabel(plantId: string) {
   return `${card.name} (Pts ${card.points}, Decay ${card.decayPerRound})`;
 }
 
-export function getPlantAbilityDescriptions(abilityIds: string[]) {
-  return abilityIds.map((abilityId) => ABILITY_DESCRIPTION_MAP[abilityId] ?? abilityId);
+export function getPlantAbilityDescriptions(_abilityIds: string[]) {
+  return [];
 }

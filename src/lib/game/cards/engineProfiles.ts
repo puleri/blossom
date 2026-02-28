@@ -59,8 +59,8 @@ function getCardPlayableBiomes(card: PlantCard): BiomeName[] {
   return [deriveBiome(card.id)];
 }
 
-function deriveLevel(seedCost: number): PlantEngineProfile["level"] {
-  return Math.min(6, Math.max(1, seedCost + 1)) as PlantEngineProfile["level"];
+function deriveLevel(card: PlantCard): PlantEngineProfile["level"] {
+  return Math.min(6, Math.max(1, Math.ceil(card.points / 2))) as PlantEngineProfile["level"];
 }
 
 function deriveSunCost(level: PlantEngineProfile["level"]) {
@@ -96,7 +96,7 @@ const biomeCounts: Record<BiomeName, number> = { desert: 0, plains: 0, rainfores
 PLANT_CARDS.forEach((card) => {
   const playableBiomes = getCardPlayableBiomes(card);
   const biome = playableBiomes[0];
-  const level = card.level ?? deriveLevel(card.seedCost);
+  const level = card.level ?? deriveLevel(card);
   const sunCost = card.sunCost ?? deriveSunCost(level);
   const sunCapacity = card.sunCapacity ?? deriveSunCapacity(biome, level);
   const engineSummary = card.engineSummary ?? deriveEngineSummary(card, biomeCounts[biome], biome);
