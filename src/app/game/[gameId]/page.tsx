@@ -13,11 +13,6 @@ import {
   activateDesertBiomeTx,
   activatePlainsBiomeTx,
   activateRainforestBiomeTx,
-  drawPlantCardTx,
-  forceBloomTx,
-  goToWellTx,
-  harvestNowTx,
-  passTurnTx,
   resolveRoundUpkeepTx,
   sowPlantTx,
   submitUpkeepEventResponseTx,
@@ -370,67 +365,6 @@ export default function GamePage({ params }: GamePageProps) {
                       {busyAction === "activate-rainforest" ? "Activating..." : "Activate Rainforest biome"}
                     </button>
 
-                    <button
-                      onClick={() =>
-                        runAction("well", async () => {
-                          if (!user?.uid) throw new Error("Missing authenticated user id.");
-                          await goToWellTx(gameId, user.uid);
-                        })
-                      }
-                      disabled={Boolean(busyAction) || actionsExhausted}
-                    >
-                      {busyAction === "well" ? "Visiting well..." : "Go to the well (water plants + gain 2 water)"}
-                    </button>
-
-                    <button
-                      onClick={() =>
-                        runAction("draw-plant", async () => {
-                          if (!user?.uid) throw new Error("Missing authenticated user id.");
-                          await drawPlantCardTx(gameId, user.uid);
-                        })
-                      }
-                      disabled={Boolean(busyAction) || actionsExhausted}
-                    >
-                      {busyAction === "draw-plant" ? "Drawing..." : "Draw a plant card"}
-                    </button>
-
-                    <button
-                      onClick={() =>
-                        runAction("harvest-now", async () => {
-                          if (!user?.uid) throw new Error("Missing authenticated user id.");
-                          await harvestNowTx(gameId, user.uid);
-                        })
-                      }
-                      disabled={Boolean(busyAction) || actionsExhausted || currentPlayer.resources.buds < 1}
-                      title="Safe: convert buds directly into points now at lower efficiency."
-                    >
-                      {busyAction === "harvest-now" ? "Harvesting..." : "Harvest buds now (safe)"}
-                    </button>
-
-                    <button
-                      onClick={() =>
-                        runAction("force-bloom", async () => {
-                          if (!user?.uid) throw new Error("Missing authenticated user id.");
-                          await forceBloomTx(gameId, user.uid);
-                        })
-                      }
-                      disabled={Boolean(busyAction) || actionsExhausted || currentPlayer.resources.buds < 1}
-                      title="Convert all buds into flowers."
-                    >
-                      {busyAction === "force-bloom" ? "Forcing bloom..." : "Force bloom"}
-                    </button>
-
-                    <button
-                      onClick={() =>
-                        runAction("pass", async () => {
-                          if (!user?.uid) throw new Error("Missing authenticated user id.");
-                          await passTurnTx(gameId, user.uid);
-                        })
-                      }
-                      disabled={Boolean(busyAction) || actionsExhausted}
-                    >
-                      {busyAction === "pass" ? "Passing..." : "Pass turn / hold buds"}
-                    </button>
                   </div>
                 </>
               ) : (
