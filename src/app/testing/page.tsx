@@ -8,6 +8,7 @@ import { HandPanel } from "@/components/game/HandPanel";
 import { PlayerList } from "@/components/game/PlayerList";
 import { EVENT_CARDS } from "@/lib/game/cards/events";
 import { PLANT_CARDS } from "@/lib/game/cards/plants";
+import { getCardsByBiome, getPlantEngineProfile } from "@/lib/game/cards/engineProfiles";
 import { drawFromDeck, revealNextEvent } from "@/lib/game/decks";
 import {
   applyAdjacentPairBonuses,
@@ -37,6 +38,8 @@ export default function TestingPage() {
   const isHost = Boolean(currentPlayer && currentPlayer.id === game.hostPlayerId);
   const currentPlant = PLANT_CARDS.find((plant) => plant.id === selectedPlantId) ?? null;
   const currentEvent = EVENT_CARDS.find((event) => event.id === game.currentEventId) ?? null;
+
+  const cardsByBiome = useMemo(() => getCardsByBiome(), []);
 
   useEffect(() => {
     if (!currentPlayer) {
@@ -351,6 +354,31 @@ export default function TestingPage() {
           Round event in play: <strong>{currentEvent.name}</strong> — {currentEvent.description}
         </p>
       ) : null}
+
+      <section>
+        <h2>Plant card library (Wingspan-style lanes)</h2>
+        <p>Plains engines focus on drawing cards, Desert engines generate sun for level 2-6 plays, and Rainforest engines generate rain tokens (food equivalent).</p>
+        <div style={{ display: "grid", gap: 12 }}>
+          {(["plains", "desert", "rainforest"] as const).map((biome) => (
+            <article key={biome} style={{ border: "1px solid #d1d5db", borderRadius: 10, padding: 12, background: "#ffffff" }}>
+              <h3 style={{ margin: 0, color: "#111827", textTransform: "capitalize" }}>{biome}</h3>
+              <div style={{ display: "grid", gap: 8, marginTop: 10 }}>
+                {cardsByBiome[biome].map((card) => {
+                  const profile = getPlantEngineProfile(card.id);
+                  if (!profile) return null;
+
+                  return (
+                    <div key={card.id} style={{ border: "1px solid #e5e7eb", borderRadius: 8, padding: 8, color: "#1f2937" }}>
+                      <strong>{card.name}</strong> · Level {profile.level} · Sun cost {profile.sunCost}
+                      <p style={{ margin: "4px 0 0", fontSize: 13 }}>{profile.engineSummary}</p>
+                    </div>
+                  );
+                })}
+              </div>
+            </article>
+          ))}
+        </div>
+      </section>
 
       <section>
         <h2>Carnivorous engine snapshots</h2>

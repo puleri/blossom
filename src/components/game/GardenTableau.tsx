@@ -1,5 +1,6 @@
 import { BIOME_LABELS, BIOME_SLOT_INDICES } from "@/lib/game/constants";
 import { getPlantAbilityDescriptions, getPlantCardById } from "@/lib/game/cards/details";
+import { getPlantEngineProfile } from "@/lib/game/cards/engineProfiles";
 import { getPlantSchoolBorderColor } from "@/lib/game/cards/schools";
 import type { BiomeName, GardenSlot } from "@/lib/game/types";
 
@@ -30,6 +31,7 @@ export function GardenTableau({ slots }: GardenTableauProps) {
               {BIOME_SLOT_INDICES[biome].map((index) => {
                 const slot = slots[index] ?? { state: "empty", plantId: null };
                 const plant = slot.plantId ? getPlantCardById(slot.plantId) : null;
+                const profile = slot.plantId ? getPlantEngineProfile(slot.plantId) : null;
                 const borderColor = slot.plantId ? getPlantSchoolBorderColor(slot.plantId) : "#ccc";
 
                 return (
@@ -44,6 +46,11 @@ export function GardenTableau({ slots }: GardenTableauProps) {
                         <p style={{ margin: "6px 0", fontSize: 12 }}>
                           Decay {plant.decayPerRound} · Upkeep {plant.requiresUpkeep ? "Yes" : "No"}
                         </p>
+                        {profile ? (
+                          <p style={{ margin: "6px 0", fontSize: 12 }}>
+                            L{profile.level} · Sun {profile.sunCost}/{profile.sunCapacity} · {profile.engineSummary}
+                          </p>
+                        ) : null}
                         <p style={{ margin: "6px 0", fontSize: 12 }}>
                           Ability: {getPlantAbilityDescriptions(plant.abilities).join(" · ")}
                         </p>

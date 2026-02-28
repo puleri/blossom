@@ -31,6 +31,11 @@ export interface PlantCard {
   decayPerRound: number;
   requiresUpkeep: boolean;
   abilities: string[];
+  biome?: BiomeName;
+  level?: 1 | 2 | 3 | 4 | 5 | 6;
+  sunCost?: number;
+  sunCapacity?: number;
+  engineSummary?: string;
 }
 
 export type EventTag = "weather" | "pest" | "pollination";
