@@ -286,7 +286,158 @@ export default function GamePage({ params }: GamePageProps) {
             </p>
           ) : null}
           <PlayerList players={players} activePlayerId={game.activePlayerId} />
-          {currentPlayer ? <HandPanel hand={currentPlayer.hand} /> : null}
+          {currentPlayer ? (
+            <HandPanel hand={currentPlayer.hand}>
+              {isMyTurn ? (
+                <>
+                  <h3>Your turn actions</h3>
+                  <p>Actions remaining: {remainingTurnActions}</p>
+                  <label>
+                    Plant from hand
+                    <select value={selectedPlantId} onChange={(event) => setSelectedPlantId(event.target.value)}>
+                      {currentPlayer.hand.map((plantId) => (
+                        <option key={plantId} value={plantId}>
+                          {getPlantSummaryLabel(plantId)}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <label>
+                    Biome
+                    <select value={selectedBiome} onChange={(event) => setSelectedBiome(event.target.value as "desert" | "plains" | "rainforest")}>
+                      <option value="desert">{BIOME_LABELS.desert}</option>
+                      <option value="plains">{BIOME_LABELS.plains}</option>
+                      <option value="rainforest">{BIOME_LABELS.rainforest}</option>
+                    </select>
+                  </label>
+
+                  {actionsExhausted ? <p>No actions left. Your turn will advance automatically.</p> : null}
+                  {!actionsExhausted ? <p style={{ marginTop: 8 }}>Available actions: Plant (choose biome), Activate Desert, Activate Plains, Activate Rainforest, Well, Draw, Harvest, Force Bloom, Pass.</p> : null}
+
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    <button
+                      onClick={() =>
+                        runAction("sow", async () => {
+                          if (!user?.uid) throw new Error("Missing authenticated user id.");
+                          if (!selectedPlantId) throw new Error("Select a plant to plant.");
+                          await sowPlantTx(gameId, user.uid, selectedPlantId, selectedBiome);
+                        })
+                      }
+                      disabled={
+                        Boolean(busyAction) ||
+                        actionsExhausted ||
+                        !selectedPlantId ||
+                        !currentPlant
+                      }
+                    >
+                      {busyAction === "sow" ? "Planting..." : `Plant in ${BIOME_LABELS[selectedBiome]}`}
+                    </button>
+
+                    <button
+                      onClick={() =>
+                        runAction("activate-desert", async () => {
+                          if (!user?.uid) throw new Error("Missing authenticated user id.");
+                          await activateDesertBiomeTx(gameId, user.uid);
+                        })
+                      }
+                      disabled={Boolean(busyAction) || actionsExhausted}
+                    >
+                      {busyAction === "activate-desert" ? "Activating..." : "Activate Desert biome"}
+                    </button>
+
+                    <button
+                      onClick={() =>
+                        runAction("activate-plains", async () => {
+                          if (!user?.uid) throw new Error("Missing authenticated user id.");
+                          await activatePlainsBiomeTx(gameId, user.uid);
+                        })
+                      }
+                      disabled={Boolean(busyAction) || actionsExhausted}
+                    >
+                      {busyAction === "activate-plains" ? "Activating..." : "Activate Plains biome"}
+                    </button>
+
+                    <button
+                      onClick={() =>
+                        runAction("activate-rainforest", async () => {
+                          if (!user?.uid) throw new Error("Missing authenticated user id.");
+                          await activateRainforestBiomeTx(gameId, user.uid);
+                        })
+                      }
+                      disabled={Boolean(busyAction) || actionsExhausted}
+                    >
+                      {busyAction === "activate-rainforest" ? "Activating..." : "Activate Rainforest biome"}
+                    </button>
+
+                    <button
+                      onClick={() =>
+                        runAction("well", async () => {
+                          if (!user?.uid) throw new Error("Missing authenticated user id.");
+                          await goToWellTx(gameId, user.uid);
+                        })
+                      }
+                      disabled={Boolean(busyAction) || actionsExhausted}
+                    >
+                      {busyAction === "well" ? "Visiting well..." : "Go to the well (water plants + gain 2 water)"}
+                    </button>
+
+                    <button
+                      onClick={() =>
+                        runAction("draw-plant", async () => {
+                          if (!user?.uid) throw new Error("Missing authenticated user id.");
+                          await drawPlantCardTx(gameId, user.uid);
+                        })
+                      }
+                      disabled={Boolean(busyAction) || actionsExhausted}
+                    >
+                      {busyAction === "draw-plant" ? "Drawing..." : "Draw a plant card"}
+                    </button>
+
+                    <button
+                      onClick={() =>
+                        runAction("harvest-now", async () => {
+                          if (!user?.uid) throw new Error("Missing authenticated user id.");
+                          await harvestNowTx(gameId, user.uid);
+                        })
+                      }
+                      disabled={Boolean(busyAction) || actionsExhausted || currentPlayer.resources.buds < 1}
+                      title="Safe: convert buds directly into points now at lower efficiency."
+                    >
+                      {busyAction === "harvest-now" ? "Harvesting..." : "Harvest buds now (safe)"}
+                    </button>
+
+                    <button
+                      onClick={() =>
+                        runAction("force-bloom", async () => {
+                          if (!user?.uid) throw new Error("Missing authenticated user id.");
+                          await forceBloomTx(gameId, user.uid);
+                        })
+                      }
+                      disabled={Boolean(busyAction) || actionsExhausted || currentPlayer.resources.buds < 1}
+                      title="Convert all buds into flowers."
+                    >
+                      {busyAction === "force-bloom" ? "Forcing bloom..." : "Force bloom"}
+                    </button>
+
+                    <button
+                      onClick={() =>
+                        runAction("pass", async () => {
+                          if (!user?.uid) throw new Error("Missing authenticated user id.");
+                          await passTurnTx(gameId, user.uid);
+                        })
+                      }
+                      disabled={Boolean(busyAction) || actionsExhausted}
+                    >
+                      {busyAction === "pass" ? "Passing..." : "Pass turn / hold buds"}
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <p>Waiting for the active player to act.</p>
+              )}
+            </HandPanel>
+          ) : null}
           <section>
             <h3>Player Gardens</h3>
             <div style={{ display: "grid", gap: 16 }}>
@@ -299,154 +450,7 @@ export default function GamePage({ params }: GamePageProps) {
             </div>
           </section>
 
-          {isMyTurn && currentPlayer ? (
-            <section>
-              <h3>Your turn actions</h3>
-              <p>Actions remaining: {remainingTurnActions}</p>
-              <label>
-                Plant from hand
-                <select value={selectedPlantId} onChange={(event) => setSelectedPlantId(event.target.value)}>
-                  {currentPlayer.hand.map((plantId) => (
-                    <option key={plantId} value={plantId}>
-                      {getPlantSummaryLabel(plantId)}
-                    </option>
-                  ))}
-                </select>
-              </label>
 
-              <label>
-                Biome
-                <select value={selectedBiome} onChange={(event) => setSelectedBiome(event.target.value as "desert" | "plains" | "rainforest")}>
-                  <option value="desert">{BIOME_LABELS.desert}</option>
-                  <option value="plains">{BIOME_LABELS.plains}</option>
-                  <option value="rainforest">{BIOME_LABELS.rainforest}</option>
-                </select>
-              </label>
-
-              {actionsExhausted ? <p>No actions left. Your turn will advance automatically.</p> : null}
-              {!actionsExhausted ? <p style={{ marginTop: 8 }}>Available actions: Plant (choose biome), Activate Desert, Activate Plains, Activate Rainforest, Well, Draw, Harvest, Force Bloom, Pass.</p> : null}
-
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                <button
-                  onClick={() =>
-                    runAction("sow", async () => {
-                      if (!user?.uid) throw new Error("Missing authenticated user id.");
-                      if (!selectedPlantId) throw new Error("Select a plant to plant.");
-                      await sowPlantTx(gameId, user.uid, selectedPlantId, selectedBiome);
-                    })
-                  }
-                  disabled={
-                    Boolean(busyAction) ||
-                    actionsExhausted ||
-                    !selectedPlantId ||
-                    !currentPlant
-                  }
-                >
-                  {busyAction === "sow" ? "Planting..." : `Plant in ${BIOME_LABELS[selectedBiome]}`}
-                </button>
-
-                <button
-                  onClick={() =>
-                    runAction("activate-desert", async () => {
-                      if (!user?.uid) throw new Error("Missing authenticated user id.");
-                      await activateDesertBiomeTx(gameId, user.uid);
-                    })
-                  }
-                  disabled={Boolean(busyAction) || actionsExhausted}
-                >
-                  {busyAction === "activate-desert" ? "Activating..." : "Activate Desert biome"}
-                </button>
-
-                <button
-                  onClick={() =>
-                    runAction("activate-plains", async () => {
-                      if (!user?.uid) throw new Error("Missing authenticated user id.");
-                      await activatePlainsBiomeTx(gameId, user.uid);
-                    })
-                  }
-                  disabled={Boolean(busyAction) || actionsExhausted}
-                >
-                  {busyAction === "activate-plains" ? "Activating..." : "Activate Plains biome"}
-                </button>
-
-                <button
-                  onClick={() =>
-                    runAction("activate-rainforest", async () => {
-                      if (!user?.uid) throw new Error("Missing authenticated user id.");
-                      await activateRainforestBiomeTx(gameId, user.uid);
-                    })
-                  }
-                  disabled={Boolean(busyAction) || actionsExhausted}
-                >
-                  {busyAction === "activate-rainforest" ? "Activating..." : "Activate Rainforest biome"}
-                </button>
-
-                <button
-                  onClick={() =>
-                    runAction("well", async () => {
-                      if (!user?.uid) throw new Error("Missing authenticated user id.");
-                      await goToWellTx(gameId, user.uid);
-                    })
-                  }
-                  disabled={Boolean(busyAction) || actionsExhausted}
-                >
-                  {busyAction === "well" ? "Visiting well..." : "Go to the well (water plants + gain 2 water)"}
-                </button>
-
-                <button
-                  onClick={() =>
-                    runAction("draw-plant", async () => {
-                      if (!user?.uid) throw new Error("Missing authenticated user id.");
-                      await drawPlantCardTx(gameId, user.uid);
-                    })
-                  }
-                  disabled={Boolean(busyAction) || actionsExhausted}
-                >
-                  {busyAction === "draw-plant" ? "Drawing..." : "Draw a plant card"}
-                </button>
-
-                <button
-                  onClick={() =>
-                    runAction("harvest-now", async () => {
-                      if (!user?.uid) throw new Error("Missing authenticated user id.");
-                      await harvestNowTx(gameId, user.uid);
-                    })
-                  }
-                  disabled={Boolean(busyAction) || actionsExhausted || currentPlayer.resources.buds < 1}
-                  title="Safe: convert buds directly into points now at lower efficiency."
-                >
-                  {busyAction === "harvest-now" ? "Harvesting..." : "Harvest buds now (safe)"}
-                </button>
-
-                <button
-                  onClick={() =>
-                    runAction("force-bloom", async () => {
-                      if (!user?.uid) throw new Error("Missing authenticated user id.");
-                      await forceBloomTx(gameId, user.uid);
-                    })
-                  }
-                  disabled={Boolean(busyAction) || actionsExhausted || currentPlayer.resources.buds < 1}
-                  title="Convert all buds into flowers."
-                >
-                  {busyAction === "force-bloom" ? "Forcing bloom..." : "Force bloom"}
-                </button>
-
-                <button
-                  onClick={() =>
-                    runAction("pass", async () => {
-                      if (!user?.uid) throw new Error("Missing authenticated user id.");
-                      await passTurnTx(gameId, user.uid);
-                    })
-                  }
-                  disabled={Boolean(busyAction) || actionsExhausted}
-                >
-                  {busyAction === "pass" ? "Passing..." : "Pass turn / hold buds"}
-                </button>
-              </div>
-            </section>
-          ) : (
-            <p>Waiting for the active player to act.</p>
-          )}
         </>
       ) : null}
 

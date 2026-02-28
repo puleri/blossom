@@ -1,12 +1,14 @@
+import { ReactNode } from "react";
 import { getPlantAbilityDescriptions, getPlantCardById } from "@/lib/game/cards/details";
 import { getPlantEngineProfile } from "@/lib/game/cards/engineProfiles";
 import { getPlantSchoolBorderColor } from "@/lib/game/cards/schools";
 
 interface HandPanelProps {
   hand: string[];
+  children?: ReactNode;
 }
 
-export function HandPanel({ hand }: HandPanelProps) {
+export function HandPanel({ hand, children }: HandPanelProps) {
   return (
     <section>
       <h2>Hand</h2>
@@ -58,6 +60,7 @@ export function HandPanel({ hand }: HandPanelProps) {
           })}
         </div>
       )}
+      {children ? <div style={{ marginTop: 12 }}>{children}</div> : null}
     </section>
   );
 }
