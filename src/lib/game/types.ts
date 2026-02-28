@@ -25,12 +25,10 @@ export interface PlayerResources {
 export interface PlantCard {
   id: string;
   name: string;
-  seedCost: number;
   points: number;
   waterCapacity: number;
   decayPerRound: number;
   requiresUpkeep: boolean;
-  abilities: string[];
   biome?: BiomeName | BiomeName[];
   level?: 1 | 2 | 3 | 4 | 5 | 6;
   sunCost?: number;

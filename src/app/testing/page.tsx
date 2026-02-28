@@ -120,9 +120,6 @@ export default function TestingPage() {
         throw new Error("Selected garden slot is not empty.");
       }
 
-      if (players[meIndex].resources.seeds < plant.seedCost) {
-        throw new Error("Not enough seeds to sow this plant.");
-      }
 
       setPlayers((previous) => {
         const next = [...previous];
@@ -131,7 +128,6 @@ export default function TestingPage() {
         nextSlots[selectedSlot] = { state: "grown", plantId: plant.id };
         updated.gardenSlots = nextSlots;
         updated.hand = updated.hand.filter((cardId) => cardId !== selectedPlantId);
-        updated.resources = { ...updated.resources, seeds: updated.resources.seeds - plant.seedCost };
         next[meIndex] = updated;
         return next;
       });
@@ -426,7 +422,7 @@ export default function TestingPage() {
               <button
                 onClick={handleSow}
                 disabled={
-                  !selectedPlantId || !currentPlant || currentPlayer.resources.seeds < currentPlant.seedCost
+                  !selectedPlantId || !currentPlant
                 }
               >
                 Sow
