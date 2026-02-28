@@ -26,7 +26,7 @@ import { useGame } from "@/hooks/useGame";
 import { useGameLog } from "@/hooks/useGameLog";
 import { useMe } from "@/hooks/useMe";
 import { usePlayers } from "@/hooks/usePlayers";
-import type { BiomeName } from "@/lib/game/types";
+import type { BiomeActivationAnnouncement, BiomeName } from "@/lib/game/types";
 
 interface GamePageProps {
   params: Promise<{ gameId: string }>;
@@ -45,6 +45,7 @@ export default function GamePage({ params }: GamePageProps) {
   const [upkeepResponseChoice, setUpkeepResponseChoice] = useState<"mitigate" | "amplify" | "none">("none");
   const [upkeepResponseResource, setUpkeepResponseResource] = useState<"water">("water");
   const [busyAction, setBusyAction] = useState<string | null>(null);
+  const [dismissedAnnouncementId, setDismissedAnnouncementId] = useState<string | null>(null);
   const loading = gameLoading || playersLoading || meLoading;
 
   const currentPlayer = useMemo(
@@ -188,6 +189,11 @@ export default function GamePage({ params }: GamePageProps) {
   const nextEventForecast = game.nextEventForecast ?? null;
   const isHost = Boolean(me?.id && me.id === game.hostPlayerId);
   const myUpkeepResponse = me?.id ? game.upkeepEventResponses?.[me.id] : null;
+
+  const biomeActivationAnnouncement = (game.biomeActivationAnnouncement as BiomeActivationAnnouncement | null | undefined) ?? null;
+  const showBiomeActivationModal = Boolean(
+    biomeActivationAnnouncement && biomeActivationAnnouncement.id !== dismissedAnnouncementId
+  );
 
   return (
     <main>
@@ -477,6 +483,36 @@ export default function GamePage({ params }: GamePageProps) {
             </div>
           </section>
         </>
+      ) : null}
+
+
+      {showBiomeActivationModal && biomeActivationAnnouncement ? (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0, 0, 0, 0.45)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 16,
+            zIndex: 1000
+          }}
+        >
+          <div style={{ background: "white", padding: 16, borderRadius: 8, maxWidth: 560, width: "100%" }}>
+            <h3 style={{ marginTop: 0 }}>Biome activation resolved</h3>
+            <p>
+              {players.find((player) => player.id === biomeActivationAnnouncement.playerId)?.displayName ?? "A player"} activated
+              {` ${biomeActivationAnnouncement.biome}.`}
+            </p>
+            <ul>
+              {biomeActivationAnnouncement.messages.map((message, index) => (
+                <li key={`${biomeActivationAnnouncement.id}-${index}`}>{message}</li>
+              ))}
+            </ul>
+            <button onClick={() => setDismissedAnnouncementId(biomeActivationAnnouncement.id)}>Close</button>
+          </div>
+        </div>
       ) : null}
 
       {logLoading ? <p>Loading game log...</p> : <GameLog entries={logEntries.map((entry) => entry.message)} />}

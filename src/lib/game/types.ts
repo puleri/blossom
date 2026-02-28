@@ -61,6 +61,13 @@ export interface UpkeepEventResponse {
   spentResource: "water" | null;
 }
 
+export interface BiomeActivationAnnouncement {
+  id: string;
+  playerId: string;
+  biome: BiomeName;
+  messages: string[];
+}
+
 export interface PlayerDoc {
   id: string;
   displayName: string;
@@ -95,6 +102,7 @@ export interface GameDoc {
   currentEventId: string | null;
   nextEventForecast?: EventForecast | null;
   upkeepEventResponses?: Record<string, UpkeepEventResponse>;
+  biomeActivationAnnouncement?: BiomeActivationAnnouncement | null;
   log?: string[];
 }
 
