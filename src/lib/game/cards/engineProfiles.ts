@@ -47,6 +47,18 @@ function deriveBiome(cardId: string): BiomeName {
   return "plains";
 }
 
+function getCardPlayableBiomes(card: PlantCard): BiomeName[] {
+  if (Array.isArray(card.biome) && card.biome.length > 0) {
+    return card.biome;
+  }
+
+  if (typeof card.biome === "string") {
+    return [card.biome];
+  }
+
+  return [deriveBiome(card.id)];
+}
+
 function deriveLevel(seedCost: number): PlantEngineProfile["level"] {
   return Math.min(6, Math.max(1, seedCost + 1)) as PlantEngineProfile["level"];
 }
@@ -78,14 +90,18 @@ function deriveEngineSummary(card: PlantCard, cardIndexWithinBiome: number, biom
 }
 
 const profilesById = new Map<string, PlantEngineProfile>();
+const playableBiomesById = new Map<string, BiomeName[]>();
 const biomeCounts: Record<BiomeName, number> = { desert: 0, plains: 0, rainforest: 0 };
 
 PLANT_CARDS.forEach((card) => {
-  const biome = card.biome ?? deriveBiome(card.id);
+  const playableBiomes = getCardPlayableBiomes(card);
+  const biome = playableBiomes[0];
   const level = card.level ?? deriveLevel(card.seedCost);
   const sunCost = card.sunCost ?? deriveSunCost(level);
   const sunCapacity = card.sunCapacity ?? deriveSunCapacity(biome, level);
   const engineSummary = card.engineSummary ?? deriveEngineSummary(card, biomeCounts[biome], biome);
+
+  playableBiomesById.set(card.id, playableBiomes);
 
   profilesById.set(card.id, {
     biome,
@@ -100,6 +116,10 @@ PLANT_CARDS.forEach((card) => {
 
 export function getPlantEngineProfile(plantId: string): PlantEngineProfile | null {
   return profilesById.get(plantId) ?? null;
+}
+
+export function getPlantPlayableBiomes(plantId: string): BiomeName[] {
+  return playableBiomesById.get(plantId) ?? [];
 }
 
 export function getCardsByBiome() {

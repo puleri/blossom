@@ -20,6 +20,7 @@ import {
 } from "@/lib/game/actions";
 import { EVENT_CARDS } from "@/lib/game/cards/events";
 import { getPlantCardById, getPlantSummaryLabel } from "@/lib/game/cards/details";
+import { getPlantPlayableBiomes } from "@/lib/game/cards/engineProfiles";
 import { useAuthUser } from "@/hooks/useAuthUser";
 import { useGame } from "@/hooks/useGame";
 import { useGameLog } from "@/hooks/useGameLog";
@@ -156,10 +157,19 @@ export default function GamePage({ params }: GamePageProps) {
     });
   }, [currentPlayer]);
 
-  const availableBiomesByPlantId = useMemo(
-    () => Object.fromEntries(currentPlayer?.hand.map((plantId) => [plantId, plantableBiomes]) ?? []),
-    [currentPlayer?.hand, plantableBiomes]
-  );
+  const availableBiomesByPlantId = useMemo(() => {
+    if (!currentPlayer) {
+      return {};
+    }
+
+    return Object.fromEntries(
+      currentPlayer.hand.map((plantId) => {
+        const playableBiomes = new Set(getPlantPlayableBiomes(plantId));
+        const compatibleBiomes = plantableBiomes.filter((biome) => playableBiomes.has(biome));
+        return [plantId, compatibleBiomes];
+      })
+    );
+  }, [currentPlayer, plantableBiomes]);
 
   if (loading) {
     return <main>Loading game...</main>;

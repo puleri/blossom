@@ -31,7 +31,7 @@ export interface PlantCard {
   decayPerRound: number;
   requiresUpkeep: boolean;
   abilities: string[];
-  biome?: BiomeName;
+  biome?: BiomeName | BiomeName[];
   level?: 1 | 2 | 3 | 4 | 5 | 6;
   sunCost?: number;
   sunCapacity?: number;
