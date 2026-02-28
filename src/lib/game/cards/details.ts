@@ -24,8 +24,8 @@ const ABILITY_DESCRIPTION_MAP: Record<string, string> = {
   web_of_fangs_round_end: "Round end: adjacent Carnivorous plants that flower grant +1 bug token each.",
   sovereign_predator_game_end:
     "Game end: +1 point per bug token and +2 points per Carnivorous plant in your garden.",
-  spreading_runner_round_end: "Round end: spreads runners to expand presence.",
-  spread_enters_with_zero_water: "Spreads start dry and must be watered to grow.",
+  spreading_runner_round_end: "Round end: transplant a runner into an empty slot.",
+  spread_enters_with_zero_water: "Spreads start dry and should be watered to sustain engine output.",
   modest_bloom_round_end: "Round end: if full water, gain 1 flower token.",
   fertile_bloom_round_end: "Round end: if this flowers, gain 1 seed.",
   lunar_hydration_round_end: "Round end: if this flowers, gain 1 water.",

@@ -13,10 +13,8 @@ import {
   activateDesertBiomeTx,
   activatePlainsBiomeTx,
   activateRainforestBiomeTx,
-  compostWitheredTx,
   drawPlantCardTx,
   forceBloomTx,
-  gambleBloomTx,
   goToWellTx,
   harvestNowTx,
   passTurnTx,
@@ -49,7 +47,6 @@ export default function GamePage({ params }: GamePageProps) {
   const [setupKeptPlantIds, setSetupKeptPlantIds] = useState<string[]>([]);
   const [selectedPlantId, setSelectedPlantId] = useState<string>("");
   const [selectedBiome, setSelectedBiome] = useState<"desert" | "plains" | "rainforest">("desert");
-  const [selectedWitheredSlot, setSelectedWitheredSlot] = useState<number>(0);
   const [upkeepResponseChoice, setUpkeepResponseChoice] = useState<"mitigate" | "amplify" | "none">("none");
   const [upkeepResponseResource, setUpkeepResponseResource] = useState<"water">("water");
   const [busyAction, setBusyAction] = useState<string | null>(null);
@@ -86,7 +83,6 @@ export default function GamePage({ params }: GamePageProps) {
     if (!currentPlayer) {
       setSetupKeptPlantIds([]);
       setSelectedPlantId("");
-      setSelectedWitheredSlot(0);
       return;
     }
 
@@ -100,15 +96,6 @@ export default function GamePage({ params }: GamePageProps) {
     });
   }, [currentHandKey, currentPlayer]);
 
-
-  useEffect(() => {
-    if (!currentPlayer) {
-      return;
-    }
-
-    const firstWitheredIndex = currentPlayer.gardenSlots.findIndex((slot) => slot.state === "withered");
-    setSelectedWitheredSlot(firstWitheredIndex >= 0 ? firstWitheredIndex : 0);
-  }, [currentPlayer]);
   if (loading) {
     return <main>Loading game...</main>;
   }
@@ -292,7 +279,7 @@ export default function GamePage({ params }: GamePageProps) {
 
       {game.phase === "turns" ? (
         <>
-          <p>Turns phase is in progress. Upkeep now generates buds first; buds can be harvested now (safe, lower yield) or held to force bloom into flowers later (higher upside, but exposed to risks/events). Bugs now reduce final score, so pest pressure is dangerous unless you clear or convert bugs.</p>
+          <p>Turns phase is in progress. Upkeep generates buds first; you can harvest buds now for points or hold them and convert to flowers with Force Bloom on your turn.</p>
           {currentEvent ? (
             <p>
               Round event in play: <strong>{currentEvent.name}</strong> — {currentEvent.description} (resolves at round end)
@@ -336,19 +323,8 @@ export default function GamePage({ params }: GamePageProps) {
                 </select>
               </label>
 
-              <label>
-                Withered slot for compost (risky)
-                <select value={selectedWitheredSlot} onChange={(event) => setSelectedWitheredSlot(Number(event.target.value))}>
-                  {currentPlayer.gardenSlots.map((slot, index) => (
-                    <option key={`withered-slot-${index}`} value={index} disabled={slot.state !== "withered"}>
-                      Slot {index + 1} {slot.state === "withered" ? "(withered)" : ""}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
               {actionsExhausted ? <p>No actions left. Your turn will advance automatically.</p> : null}
-              {!actionsExhausted ? <p style={{ marginTop: 8 }}>Available actions: Plant (choose biome), Activate Desert, Activate Plains, Activate Rainforest, Well, Draw, Compost Withered, Gamble Bloom, Harvest, Force Bloom, Pass.</p> : null}
+              {!actionsExhausted ? <p style={{ marginTop: 8 }}>Available actions: Plant (choose biome), Activate Desert, Activate Plains, Activate Rainforest, Well, Draw, Harvest, Force Bloom, Pass.</p> : null}
 
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                 <button
@@ -431,36 +407,6 @@ export default function GamePage({ params }: GamePageProps) {
 
                 <button
                   onClick={() =>
-                    runAction("compost", async () => {
-                      if (!user?.uid) throw new Error("Missing authenticated user id.");
-                      await compostWitheredTx(gameId, user.uid, selectedWitheredSlot);
-                    })
-                  }
-                  disabled={
-                    Boolean(busyAction) ||
-                    actionsExhausted ||
-                    !currentPlayer.gardenSlots.some((slot) => slot.state === "withered")
-                  }
-                  title="Risky: consume a withered slot for growth resources, but compost can attract bugs that now reduce score unless countered."
-                >
-                  {busyAction === "compost" ? "Composting..." : "Compost withered slot (risky)"}
-                </button>
-
-                <button
-                  onClick={() =>
-                    runAction("gamble-bloom", async () => {
-                      if (!user?.uid) throw new Error("Missing authenticated user id.");
-                      await gambleBloomTx(gameId, user.uid);
-                    })
-                  }
-                  disabled={Boolean(busyAction) || actionsExhausted || currentPlayer.resources.water < 2}
-                  title="Risky: spend 2 water and roll for flowers; low rolls add bugs that reduce score."
-                >
-                  {busyAction === "gamble-bloom" ? "Gambling..." : "Gamble bloom (risky)"}
-                </button>
-
-                <button
-                  onClick={() =>
                     runAction("harvest-now", async () => {
                       if (!user?.uid) throw new Error("Missing authenticated user id.");
                       await harvestNowTx(gameId, user.uid);
@@ -480,9 +426,9 @@ export default function GamePage({ params }: GamePageProps) {
                     })
                   }
                   disabled={Boolean(busyAction) || actionsExhausted || currentPlayer.resources.buds < 1}
-                  title="Risky: convert buds into flowers, but may lose water, gain bugs, or fail a wither check. Bug counterplay includes Ladybugs plus Carnivorous conversion cards like Sundew Cluster and Mawroot Bulb."
+                  title="Convert all buds into flowers."
                 >
-                  {busyAction === "force-bloom" ? "Forcing bloom..." : "Force bloom (risky hold payoff)"}
+                  {busyAction === "force-bloom" ? "Forcing bloom..." : "Force bloom"}
                 </button>
 
                 <button

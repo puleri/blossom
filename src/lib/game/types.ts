@@ -2,7 +2,7 @@ export type GameStatus = "lobby" | "in_progress" | "ended";
 
 export type Phase = "lobby" | "setup" | "turns" | "upkeep" | "ended";
 
-export type GardenSlotState = "empty" | "seedling" | "grown" | "withered";
+export type GardenSlotState = "empty" | "grown" | "withered";
 
 export type BiomeName = "desert" | "plains" | "rainforest";
 
