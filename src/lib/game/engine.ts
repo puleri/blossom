@@ -13,6 +13,9 @@ function clampResource(value: number) {
 
 const HYDRATION_GROWTH_THRESHOLD = 2;
 const HYDRATION_BLOOM_THRESHOLD = 3;
+const DEFAULT_PLANT_WATER_CAPACITY = 3;
+const DEFAULT_PLANT_DECAY_PER_ROUND = 1;
+const DEFAULT_PLANT_REQUIRES_UPKEEP = true;
 
 
 const CARNIVOROUS_PLANT_IDS = new Set([
@@ -113,19 +116,19 @@ export function applyPlantDecayAndDeaths(player: PlayerDoc): PlayerDoc {
     }
 
     const slotWater = slot.water ?? 0;
-    const hasRootRot = slotWater > card.waterCapacity;
-    const upkeepDrain = Math.max(1, card.decayPerRound);
-    const remainingWater = clampResource(Math.min(slotWater, card.waterCapacity) - upkeepDrain);
+    const hasRootRot = slotWater > DEFAULT_PLANT_WATER_CAPACITY;
+    const upkeepDrain = Math.max(1, DEFAULT_PLANT_DECAY_PER_ROUND);
+    const remainingWater = clampResource(Math.min(slotWater, DEFAULT_PLANT_WATER_CAPACITY) - upkeepDrain);
 
     if (hasRootRot) {
       return { state: "withered", plantId: null, water: 0 };
     }
 
-    if (!card.requiresUpkeep) {
+    if (!DEFAULT_PLANT_REQUIRES_UPKEEP) {
       return { ...slot, water: remainingWater };
     }
 
-    if (slotWater === 0 || (slotWater < HYDRATION_GROWTH_THRESHOLD && card.decayPerRound >= 2)) {
+    if (slotWater === 0 || (slotWater < HYDRATION_GROWTH_THRESHOLD && DEFAULT_PLANT_DECAY_PER_ROUND >= 2)) {
       return { state: "withered", plantId: null, water: 0 };
     }
 
