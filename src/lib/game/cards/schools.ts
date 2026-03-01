@@ -12,7 +12,10 @@ const CARNIVOROUS_PLANT_IDS = new Set([
   "mawroot-bulb",
   "carrion-bloom",
   "razorleaf-net",
-  "apex-devourer"
+  "apex-devourer",
+  "dustcap-mycelium",
+  "gravecap-recycler",
+  "veilspore-archivist"
 ]);
 
 const BLOOM_PLANT_IDS = new Set([

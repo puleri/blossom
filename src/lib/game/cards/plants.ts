@@ -230,6 +230,36 @@ export const PLANT_CARDS: PlantCard[] = [
     id: "dominion-baobab",
     name: "Dominion Baobab",
     points: 12,
+  },
+  {
+    id: "dustcap-mycelium",
+    name: "Dustcap Mycelium",
+    points: 4,
+    biome: "rainforest",
+    level: 2,
+    sunCapacity: 2,
+    engineSummary: "Root — You may spend 1 compost to draw 2 plant cards.",
+    flavorText: "What dies above feeds what spreads below."
+  },
+  {
+    id: "gravecap-recycler",
+    name: "Gravecap Recycler",
+    points: 4,
+    biome: "rainforest",
+    level: 2,
+    sunCapacity: 3,
+    engineSummary: "Root — You may tuck 1 card from your hand beneath this plant to gain 1 compost.",
+    flavorText: "Nothing is wasted beneath the soil."
+  },
+  {
+    id: "veilspore-archivist",
+    name: "Veilspore Archivist",
+    points: 5,
+    biome: "plains",
+    level: 3,
+    sunCapacity: 4,
+    engineSummary: "Pollinate — Draw 2 cards, then tuck 1 card from your hand beneath this plant.",
+    flavorText: "It remembers what the forest forgets."
   }
 ];
 
