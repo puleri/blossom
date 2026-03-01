@@ -40,10 +40,10 @@ export function GardenTableau({ slots }: GardenTableauProps) {
                       <>
                         <p style={{ margin: "6px 0" }}>Plant: {plant.name}</p>
                         <p style={{ margin: "6px 0", fontSize: 12 }}>
-                          Pts {plant.points} · Water {plant.waterCapacity}
+                          Pts {plant.points}
                         </p>
                         <p style={{ margin: "6px 0", fontSize: 12 }}>
-                          Decay {plant.decayPerRound} · Upkeep {plant.requiresUpkeep ? "Yes" : "No"}
+                          ID {plant.id}
                         </p>
                         {profile ? (
                           <p style={{ margin: "6px 0", fontSize: 12 }}>

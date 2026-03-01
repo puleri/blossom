@@ -26,9 +26,6 @@ export interface PlantCard {
   id: string;
   name: string;
   points: number;
-  waterCapacity: number;
-  decayPerRound: number;
-  requiresUpkeep: boolean;
   biome?: BiomeName | BiomeName[];
   level?: 1 | 2 | 3 | 4 | 5 | 6;
   sunCost?: number;

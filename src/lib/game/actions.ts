@@ -540,7 +540,7 @@ export async function goToWellTx(gameId: string, uid: string, slotIndices: numbe
       const slotIndex = candidateIndices[i];
       const slot = nextSlots[slotIndex];
       const card = slot.plantId ? getPlantCardById(slot.plantId) : null;
-      const capacity = card?.waterCapacity ?? 0;
+      const capacity = card ? 3 : 0;
       const currentWater = slot.water ?? 0;
       if (currentWater >= capacity) {
         continue;
