@@ -20,6 +20,7 @@ export const GAME_TEST_DATA: GameTestData = {
     playerOrder: ["player-host", "player-guest"],
     turnIndex: 0,
     remainingActions: 2,
+    availableActions: ["grow", "root", "toTheSun", "pollinate"],
     eventDeck: [],
     plantDeck: ["sunbloom", "rainfern", "thornivy", "petalburst"],
     lastPhaseResolvedRound: 1,
