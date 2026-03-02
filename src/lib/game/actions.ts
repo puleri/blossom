@@ -590,6 +590,7 @@ export async function submitSetupKeepTx(
 }
 
 export async function sowPlantTx(gameId: string, uid: string, plantId: string, biome: BiomeName) {
+  console.log("[plant-flow] sowPlantTx start", { gameId, uid, plantId, biome });
   const players = await getOrderedPlayers(gameId);
 
   return runTransaction(firestore, async (transaction) => {
@@ -603,15 +604,39 @@ export async function sowPlantTx(gameId: string, uid: string, plantId: string, b
     requireActionsRemaining(gameData);
 
     const playerData = playerSnap.data();
+    console.log("[plant-flow] sowPlantTx player validated", {
+      gameId,
+      uid,
+      playerId: playerSnap.id,
+      activePlayerId: gameData.activePlayerId,
+      remainingActions: gameData.remainingActions ?? null,
+      handSize: playerData.hand.length
+    });
     const gardenSlots = normalizeGardenSlots(playerData);
     const biomeSlots = getBiomeSlots(biome);
     const slotIndex = biomeSlots.find((index) => {
       const slot = gardenSlots[index];
       return slot ? isPlantableSlotState(slot.state) : false;
     });
+    console.log("[plant-flow] sowPlantTx slot lookup", {
+      gameId,
+      playerId: playerSnap.id,
+      biome,
+      biomeSlots,
+      chosenSlotIndex: slotIndex,
+      biomeSlotStates: biomeSlots.map((index) => ({ index, state: gardenSlots[index]?.state ?? null, plantId: gardenSlots[index]?.plantId ?? null }))
+    });
     assert(slotIndex !== undefined, `${BIOME_LABELS[biome]} has no empty planting slots.`);
 
-    assert(playerData.hand.includes(plantId), "Plant not found in hand.");
+    const hasPlantInHand = playerData.hand.includes(plantId);
+    console.log("[plant-flow] sowPlantTx hand check", {
+      gameId,
+      playerId: playerSnap.id,
+      plantId,
+      hasPlantInHand,
+      hand: playerData.hand
+    });
+    assert(hasPlantInHand, "Plant not found in hand.");
 
     const plant = getPlantCardById(plantId);
     assert(plant, "Plant card definition not found.");
@@ -627,6 +652,16 @@ export async function sowPlantTx(gameId: string, uid: string, plantId: string, b
       },
       slotIndex
     );
+    console.log("[plant-flow] sowPlantTx onPlay resolved", {
+      gameId,
+      playerId: playerSnap.id,
+      plantedPlantId: plant.id,
+      slotIndex,
+      handAfterPlay: onPlayResolved.player.hand,
+      resourcesAfterPlay: onPlayResolved.player.resources,
+      scoreAfterPlay: onPlayResolved.player.score,
+      onPlayLogs: onPlayResolved.logs
+    });
 
     transaction.update(playerDocRef(gameId, playerSnap.id), {
       hand: onPlayResolved.player.hand,
@@ -649,6 +684,14 @@ export async function sowPlantTx(gameId: string, uid: string, plantId: string, b
         playerId: playerSnap.id,
         type: "action"
       });
+    });
+
+    console.log("[plant-flow] sowPlantTx transaction updates queued", {
+      gameId,
+      playerId: playerSnap.id,
+      plantId: plant.id,
+      biome,
+      slotIndex
     });
   });
 }
