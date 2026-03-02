@@ -29,6 +29,14 @@ interface GamePageProps {
   params: Promise<{ gameId: string }>;
 }
 
+function getSlotState(slot: { state?: string } | string | null | undefined) {
+  if (!slot) {
+    return undefined;
+  }
+
+  return typeof slot === "string" ? slot : slot.state;
+}
+
 export default function GamePage({ params }: GamePageProps) {
   const { gameId } = use(params);
   const router = useRouter();
@@ -150,7 +158,8 @@ export default function GamePage({ params }: GamePageProps) {
     return (Object.keys(BIOME_SLOT_INDICES) as BiomeName[]).filter((biome) => {
       const biomeSlots = BIOME_SLOT_INDICES[biome];
       return biomeSlots.some((index) => {
-        const slotState = currentPlayer.gardenSlots[index]?.state;
+        const slot = currentPlayer.gardenSlots[index];
+        const slotState = getSlotState(slot);
         return slotState === "empty" || slotState === "withered";
       });
     });
