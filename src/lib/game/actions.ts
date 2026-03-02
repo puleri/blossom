@@ -591,13 +591,14 @@ export async function submitSetupKeepTx(
 
 export async function sowPlantTx(gameId: string, uid: string, plantId: string, biome: BiomeName) {
   console.log("[plant-flow] sowPlantTx start", { gameId, uid, plantId, biome });
-  const players = await getOrderedPlayers(gameId);
-
   return runTransaction(firestore, async (transaction) => {
     const gameSnap = await transaction.get(gameDocRef(gameId));
     assert(gameSnap.exists(), "Game not found.");
     const gameData = gameSnap.data();
     requireTurnPhase(gameData);
+
+    const playersSnap = await transaction.get(query(playersColRef(gameId), orderBy("joinedAt", "asc")));
+    const players = playersSnap.docs;
 
     const playerSnap = getPlayerByUid(players, uid);
     assert(gameData.activePlayerId === playerSnap.id, "Only the active player can perform turn actions.");
