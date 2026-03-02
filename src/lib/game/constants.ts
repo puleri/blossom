@@ -8,18 +8,18 @@ export const SETUP_HAND_SIZE = 5;
 
 export const ACTIONS_PER_TURN = 2;
 
-export const BIOME_ORDER = ["desert", "plains", "rainforest"] as const;
+export const BIOME_ORDER = ["oasisEdge", "meadow", "understory"] as const;
 
-export const BIOME_SLOT_INDICES: Record<"desert" | "plains" | "rainforest", readonly number[]> = {
-  desert: [0, 1, 2, 3, 4],
-  plains: [5, 6, 7, 8, 9],
-  rainforest: [10, 11, 12, 13, 14]
+export const BIOME_SLOT_INDICES: Record<"oasisEdge" | "meadow" | "understory", readonly number[]> = {
+  oasisEdge: [0, 1, 2, 3, 4],
+  meadow: [5, 6, 7, 8, 9],
+  understory: [10, 11, 12, 13, 14]
 } as const;
 
 export const BIOME_LABELS = {
-  desert: "Desert",
-  plains: "Meadow",
-  rainforest: "Understory"
+  oasisEdge: "Oasis Edge",
+  meadow: "Meadow",
+  understory: "Understory"
 } as const;
 
 export const SETUP_STARTING_RESOURCES = {

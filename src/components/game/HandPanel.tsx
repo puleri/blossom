@@ -15,9 +15,9 @@ interface HandPanelProps {
 }
 
 const BIOME_BUTTON_THEME: Record<BiomeName, { background: string; border: string; color: string }> = {
-  desert: { background: "#f4d7a1", border: "#d6b272", color: "#4c3513" },
-  plains: { background: "#cde9a3", border: "#9bc260", color: "#23400f" },
-  rainforest: { background: "#9fd8b6", border: "#5aa67f", color: "#093b26" }
+  oasisEdge: { background: "#f4d7a1", border: "#d6b272", color: "#4c3513" },
+  meadow: { background: "#cde9a3", border: "#9bc260", color: "#23400f" },
+  understory: { background: "#9fd8b6", border: "#5aa67f", color: "#093b26" }
 };
 
 export function HandPanel({ hand, canPlant = false, busyAction = null, availableBiomesByPlantId = {}, onPlantFromHand, children }: HandPanelProps) {
@@ -126,7 +126,7 @@ export function HandPanel({ hand, canPlant = false, busyAction = null, available
                                 cursor: busyAction ? "wait" : "pointer"
                               }}
                             >
-                              {busyAction === "sow" ? "Planting..." : `Plant in ${BIOME_LABELS[biome]}`}
+                              {busyAction === "sow" ? "Planting..." : `Plant in ${BIOME_LABELS[biome]} Canopy`}
                             </button>
                           );
                         })}

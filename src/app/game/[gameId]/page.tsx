@@ -10,9 +10,9 @@ import { HandPanel } from "@/components/game/HandPanel";
 import { GameLog } from "@/components/game/GameLog";
 import { leaveGame, startGameFromLobby } from "@/lib/game/gameService";
 import {
-  activateDesertBiomeTx,
-  activatePlainsBiomeTx,
-  activateRainforestBiomeTx,
+  activateOasisEdgeBiomeTx,
+  activateMeadowBiomeTx,
+  activateUnderstoryBiomeTx,
   sowPlantTx,
   submitSetupKeepTx,
 } from "@/lib/game/actions";
@@ -344,45 +344,45 @@ export default function GamePage({ params }: GamePageProps) {
                   <p>Actions remaining: {remainingTurnActions}</p>
 
                   {actionsExhausted ? <p>No actions left. Your turn will advance automatically.</p> : null}
-                  {!actionsExhausted ? <p style={{ marginTop: 8 }}>Hover a card in your hand to plant it in an open biome slot. Available actions: Plant, Activate Desert (To the Sun), Activate Meadow (Pollinate), Activate Understory (Root), Well, Draw, Pass.</p> : null}
+                  {!actionsExhausted ? <p style={{ marginTop: 8 }}>Hover a card in your hand to plant it in an open canopy slot. Available actions: Plant, Activate Oasis Edge (To the Sun), Activate Meadow (Pollinate), Activate Understory (Root), Well, Draw, Pass.</p> : null}
 
                   {!actionsExhausted && plantableBiomes.length === 0 ? <p>All biome rows are full. You cannot plant until a slot opens up.</p> : null}
 
                   <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                     <button
                       onClick={() =>
-                        runAction("activate-desert", async () => {
+                        runAction("activate-oasis-edge", async () => {
                           if (!user?.uid) throw new Error("Missing authenticated user id.");
-                          await activateDesertBiomeTx(gameId, user.uid);
+                          await activateOasisEdgeBiomeTx(gameId, user.uid);
                         })
                       }
                       disabled={Boolean(busyAction) || actionsExhausted}
                     >
-                      {busyAction === "activate-desert" ? "Activating..." : "Activate Desert biome"}
+                      {busyAction === "activate-oasis-edge" ? "Activating..." : "Activate Oasis Edge row"}
                     </button>
 
                     <button
                       onClick={() =>
-                        runAction("activate-plains", async () => {
+                        runAction("activate-meadow", async () => {
                           if (!user?.uid) throw new Error("Missing authenticated user id.");
-                          await activatePlainsBiomeTx(gameId, user.uid);
+                          await activateMeadowBiomeTx(gameId, user.uid);
                         })
                       }
                       disabled={Boolean(busyAction) || actionsExhausted}
                     >
-                      {busyAction === "activate-plains" ? "Activating..." : "Activate Meadow biome"}
+                      {busyAction === "activate-meadow" ? "Activating..." : "Activate Meadow row"}
                     </button>
 
                     <button
                       onClick={() =>
-                        runAction("activate-rainforest", async () => {
+                        runAction("activate-understory", async () => {
                           if (!user?.uid) throw new Error("Missing authenticated user id.");
-                          await activateRainforestBiomeTx(gameId, user.uid);
+                          await activateUnderstoryBiomeTx(gameId, user.uid);
                         })
                       }
                       disabled={Boolean(busyAction) || actionsExhausted}
                     >
-                      {busyAction === "activate-rainforest" ? "Activating..." : "Activate Understory biome"}
+                      {busyAction === "activate-understory" ? "Activating..." : "Activate Understory row"}
                     </button>
 
                   </div>

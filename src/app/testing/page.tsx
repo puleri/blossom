@@ -260,11 +260,11 @@ export default function TestingPage() {
 
       <section>
         <h2>Plant card library (Wingspan-style lanes)</h2>
-        <p>Desert is the growth axis (To the Sun), Meadow is the draw axis (Pollinate), and Understory is the resource axis (Root).</p>
+        <p>Oasis Edge is the growth axis (To the Sun), Meadow is the draw axis (Pollinate), and Understory is the resource axis (Root).</p>
         <div style={{ display: "grid", gap: 12 }}>
-          {(["desert", "plains", "rainforest"] as const).map((biome) => (
-            <article key={biome === "plains" ? "meadow" : biome === "rainforest" ? "understory" : biome} style={{ border: "1px solid #d1d5db", borderRadius: 10, padding: 12, background: "#ffffff" }}>
-              <h3 style={{ margin: 0, color: "#111827", textTransform: "capitalize" }}>{biome === "plains" ? "meadow" : biome === "rainforest" ? "understory" : biome}</h3>
+          {(["oasisEdge", "meadow", "understory"] as const).map((biome) => (
+            <article key={biome === "meadow" ? "meadow" : biome === "understory" ? "understory" : biome} style={{ border: "1px solid #d1d5db", borderRadius: 10, padding: 12, background: "#ffffff" }}>
+              <h3 style={{ margin: 0, color: "#111827", textTransform: "capitalize" }}>{biome === "meadow" ? "meadow" : biome === "understory" ? "understory" : biome}</h3>
               <div style={{ display: "grid", gap: 8, marginTop: 10 }}>
                 {cardsByBiome[biome].map((card) => {
                   const profile = getPlantEngineProfile(card.id);
