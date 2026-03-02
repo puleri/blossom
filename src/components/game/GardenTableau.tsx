@@ -8,6 +8,27 @@ interface GardenTableauProps {
   slots: GardenSlot[];
 }
 
+function getSlotPlantId(slot: GardenSlot | string | null | undefined) {
+  if (!slot || typeof slot === "string") {
+    return null;
+  }
+
+  const legacySlot = slot as GardenSlot & {
+    cardId?: string | null;
+    plantCardId?: string | null;
+  };
+
+  return legacySlot.plantId ?? legacySlot.cardId ?? legacySlot.plantCardId ?? null;
+}
+
+function getSlotState(slot: GardenSlot | string | null | undefined): GardenSlot["state"] {
+  if (!slot) {
+    return "empty";
+  }
+
+  return typeof slot === "string" ? (slot as GardenSlot["state"]) : slot.state;
+}
+
 const BIOME_BACKGROUND_COLORS: Record<BiomeName, string> = {
   desert: "#f4d7a1",
   plains: "#cde9a3",
@@ -29,10 +50,12 @@ export function GardenTableau({ slots }: GardenTableauProps) {
             <p style={{ margin: "0 0 8px 0", fontWeight: 600 }}>{BIOME_LABELS[biome]}</p>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(5, minmax(120px, 1fr))", gap: 8 }}>
               {BIOME_SLOT_INDICES[biome].map((index) => {
-                const slot = slots[index] ?? { state: "empty", plantId: null };
-                const plant = slot.plantId ? getPlantCardById(slot.plantId) : null;
-                const profile = slot.plantId ? getPlantEngineProfile(slot.plantId) : null;
-                const borderColor = slot.plantId ? getPlantSchoolBorderColor(slot.plantId) : "#ccc";
+                const slot = slots[index] ?? null;
+                const slotState = getSlotState(slot);
+                const plantId = getSlotPlantId(slot);
+                const plant = plantId ? getPlantCardById(plantId) : null;
+                const profile = plantId ? getPlantEngineProfile(plantId) : null;
+                const borderColor = plantId ? getPlantSchoolBorderColor(plantId) : "#ccc";
                 const abilityDescriptions = plant ? getPlantAbilityDescriptions(plant.id) : [];
                 const generatedEngineSummary = abilityDescriptions.join(" ");
 
@@ -57,7 +80,7 @@ export function GardenTableau({ slots }: GardenTableauProps) {
                         </p>
                       </>
                     ) : (
-                      <p style={{ margin: "6px 0", color: "#666" }}>{slot.state === "withered" ? "Withered" : "Empty"}</p>
+                      <p style={{ margin: "6px 0", color: "#666" }}>{slotState === "withered" ? "Withered" : "Empty"}</p>
                     )}
                   </div>
                 );
