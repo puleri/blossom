@@ -1,5 +1,5 @@
 import { BIOME_LABELS, BIOME_SLOT_INDICES } from "@/lib/game/constants";
-import { getPlantCardById, getPlantFlavorText } from "@/lib/game/cards/details";
+import { getPlantAbilityDescriptions, getPlantCardById, getPlantFlavorText } from "@/lib/game/cards/details";
 import { getPlantEngineProfile } from "@/lib/game/cards/engineProfiles";
 import { getPlantSchoolBorderColor } from "@/lib/game/cards/schools";
 import type { BiomeName, GardenSlot } from "@/lib/game/types";
@@ -33,6 +33,8 @@ export function GardenTableau({ slots }: GardenTableauProps) {
                 const plant = slot.plantId ? getPlantCardById(slot.plantId) : null;
                 const profile = slot.plantId ? getPlantEngineProfile(slot.plantId) : null;
                 const borderColor = slot.plantId ? getPlantSchoolBorderColor(slot.plantId) : "#ccc";
+                const abilityDescriptions = plant ? getPlantAbilityDescriptions(plant.id) : [];
+                const generatedEngineSummary = abilityDescriptions.join(" ");
 
                 return (
                   <div key={index} style={{ border: `2px solid ${borderColor}`, borderRadius: 4, padding: 8, minHeight: 130, background: "#fff" }}>
@@ -47,7 +49,7 @@ export function GardenTableau({ slots }: GardenTableauProps) {
                         </p>
                         {profile ? (
                           <p style={{ margin: "6px 0", fontSize: 12 }}>
-                            L{profile.level} · Sun {profile.sunCost}/{profile.sunCapacity} · {profile.engineSummary}
+                            L{profile.level} · Sun {profile.sunCost}/{profile.sunCapacity} · {generatedEngineSummary || profile.engineSummary}
                           </p>
                         ) : null}
                         <p style={{ margin: "6px 0", fontSize: 12, fontStyle: "italic", color: "#4b5563" }}>
