@@ -221,7 +221,7 @@ export default function GamePage({ params }: GamePageProps) {
 
       {game.phase === "lobby" ? (
         <>
-          <p>Waiting in lobby for players to join.</p>
+          <p>Waiting in lobby for players to join (or start now for a solo test run).</p>
           <PlayerList players={players} activePlayerId={game.activePlayerId} />
           <section>
             <h3>Player Gardens</h3>
