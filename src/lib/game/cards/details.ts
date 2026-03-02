@@ -1,5 +1,7 @@
 import { PLANT_CARDS } from "@/lib/game/cards/plants";
 import { getPlantSchool } from "@/lib/game/cards/schools";
+import { powerRegistry } from "@/lib/game/powers/cardPowers";
+import { formatPowerDslSummary } from "@/lib/game/powers/formatPowerText";
 
 const PLANT_CARD_MAP = new Map(PLANT_CARDS.map((card) => [card.id, card]));
 
@@ -46,6 +48,20 @@ export function getPlantFlavorText(plantId: string) {
   return "Wild growth finds a way between every careful plan.";
 }
 
-export function getPlantAbilityDescriptions(_abilityIds: string[]) {
-  return [];
+export function getPlantAbilityDescriptions(powerIdsOrPlantId: string[] | string) {
+  const powerIds = Array.isArray(powerIdsOrPlantId)
+    ? powerIdsOrPlantId
+    : getPlantCardById(powerIdsOrPlantId)?.powerIds ?? [];
+
+  return powerIds
+    .map((powerId) => {
+      const power = powerRegistry[powerId];
+
+      if (!power) {
+        return null;
+      }
+
+      return formatPowerDslSummary(power);
+    })
+    .filter((summary): summary is string => Boolean(summary));
 }

@@ -1,5 +1,5 @@
 import { ReactNode, useState } from "react";
-import { getPlantCardById, getPlantFlavorText } from "@/lib/game/cards/details";
+import { getPlantAbilityDescriptions, getPlantCardById, getPlantFlavorText } from "@/lib/game/cards/details";
 import { getPlantEngineProfile } from "@/lib/game/cards/engineProfiles";
 import { getPlantSchoolBorderColor } from "@/lib/game/cards/schools";
 import { BIOME_LABELS } from "@/lib/game/constants";
@@ -34,6 +34,8 @@ export function HandPanel({ hand, canPlant = false, busyAction = null, available
             const card = getPlantCardById(cardId);
             const profile = getPlantEngineProfile(cardId);
             const borderColor = getPlantSchoolBorderColor(cardId);
+            const abilityDescriptions = card ? getPlantAbilityDescriptions(card.id) : [];
+            const generatedEngineSummary = abilityDescriptions.join(" ");
 
             return (
               <article
@@ -68,7 +70,7 @@ export function HandPanel({ hand, canPlant = false, busyAction = null, available
                       </p>
                     ) : null}
                     <p style={{ margin: "6px 0", fontSize: 12 }}>
-                      Engine: {profile?.engineSummary}
+                      Engine: {generatedEngineSummary || profile?.engineSummary}
                     </p>
                     <p style={{ margin: "6px 0", fontSize: 12, fontStyle: "italic", color: "#4b5563" }}>
                       “{getPlantFlavorText(card.id)}”
