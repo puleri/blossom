@@ -13,7 +13,6 @@ import {
   activateDesertBiomeTx,
   activatePlainsBiomeTx,
   activateRainforestBiomeTx,
-  resolveRoundUpkeepTx,
   sowPlantTx,
   submitSetupKeepTx,
 } from "@/lib/game/actions";
@@ -369,40 +368,7 @@ export default function GamePage({ params }: GamePageProps) {
       ) : null}
 
       
-      {game.phase === "upkeep" ? (
-        <>
-          <p>Upkeep phase: host resolves upkeep.</p>
-          <PlayerList players={players} activePlayerId={game.activePlayerId} />
-          <section>
-            <h3>Player Gardens</h3>
-            <div style={{ display: "grid", gap: 16 }}>
-              {players.map((player) => (
-                <div key={`garden-${player.id}`}>
-                  <h4 style={{ marginBottom: 6 }}>{player.displayName}{player.id === currentPlayer?.id ? " (You)" : ""}</h4>
-                  <GardenTableau slots={player.gardenSlots} />
-                </div>
-              ))}
-            </div>
-          </section>
-          {isHost ? (
-            <button
-              onClick={() =>
-                runAction("resolve-upkeep", async () => {
-                  if (!user?.uid) {
-                    throw new Error("Missing authenticated user id.");
-                  }
-
-                  await resolveRoundUpkeepTx(gameId, user.uid);
-                })
-              }
-              disabled={Boolean(busyAction)}
-            >
-              {busyAction === "resolve-upkeep" ? "Resolving..." : "Resolve Upkeep"}
-            </button>
-          ) : null}
-        </>
-      ) : null}
-
+      
       {game.phase === "ended" ? (
         <>
           <p>Game ended. Thanks for playing!</p>

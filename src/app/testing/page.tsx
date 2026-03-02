@@ -193,28 +193,13 @@ export default function TestingPage() {
       const nextIndex = game.turnIndex + 1;
       const wrapped = nextIndex >= order.length;
 
-      setGame((previous) =>
-        wrapped
-          ? { ...previous, phase: "upkeep", activePlayerId: null, turnIndex: 0 }
-          : { ...previous, activePlayerId: order[nextIndex], turnIndex: nextIndex }
-      );
-
-      addLog(wrapped ? `Round ${game.round} turns complete. Entering upkeep.` : `${me.displayName} ended their turn.`);
-    });
-  }
-
-  function handleResolveUpkeep() {
-    runAction(() => {
-      requireCurrentPlayer();
-      if (game.phase !== "upkeep") {
-        throw new Error("Round upkeep can only be resolved during upkeep phase.");
+      if (!wrapped) {
+        setGame((previous) => ({ ...previous, activePlayerId: order[nextIndex], turnIndex: nextIndex }));
+        addLog(`${me.displayName} ended their turn.`);
+        return;
       }
 
-      if (!isHost) {
-        throw new Error("Only the host can resolve upkeep.");
-      }
-
-      const updatedPlayersAfterUpkeep = players.map((player) => {
+      const updatedPlayersAfterRound = players.map((player) => {
         const afterDecay = applyPlantDecayAndDeaths(player);
         const afterAdjacentBonuses = applyAdjacentPairBonuses(afterDecay);
 
@@ -227,12 +212,11 @@ export default function TestingPage() {
         };
       });
 
-      const nextPlayers = updatedPlayersAfterUpkeep;
       const nextRound = game.round + 1;
       const isGameOver = nextRound > game.roundsTotal;
 
       setPlayers(
-        nextPlayers.map((player) => ({
+        updatedPlayersAfterRound.map((player) => ({
           ...player,
           score: isGameOver ? computePlayerScore(player) : player.score
         }))
@@ -247,10 +231,18 @@ export default function TestingPage() {
           turnIndex: 0,
           lastPhaseResolvedRound: previous.round
         }));
-        addLog(`Round ${game.round} upkeep resolved. Game ended.`);
+        addLog(`Round ${game.round} resolved. Game ended.`);
         return;
       }
-      addLog(`Round ${game.round} upkeep resolved. Round ${nextRound} turns begin.`);
+
+      setGame((previous) => ({
+        ...previous,
+        activePlayerId: order[0],
+        turnIndex: 0,
+        round: nextRound,
+        lastPhaseResolvedRound: previous.round
+      }));
+      addLog(`Round ${game.round} resolved. Round ${nextRound} turns begin.`);
     });
   }
 
@@ -337,13 +329,6 @@ export default function TestingPage() {
         ) : (
           <p>Waiting for the active player to act.</p>
         )
-      ) : null}
-
-      {game.phase === "upkeep" ? (
-        <section>
-          <h3>Upkeep phase</h3>
-          {isHost ? <button onClick={handleResolveUpkeep}>Resolve Upkeep</button> : <p>Waiting for host resolution.</p>}
-        </section>
       ) : null}
 
       {game.phase === "ended" ? <p>Game ended. Final scores locked.</p> : null}

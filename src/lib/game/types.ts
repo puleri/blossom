@@ -1,6 +1,6 @@
 export type GameStatus = "lobby" | "in_progress" | "ended";
 
-export type Phase = "lobby" | "setup" | "turns" | "upkeep" | "ended";
+export type Phase = "lobby" | "setup" | "turns" | "ended";
 
 export type GardenSlotState = "empty" | "grown" | "withered";
 

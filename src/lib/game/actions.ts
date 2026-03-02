@@ -171,11 +171,15 @@ function consumeTurnAction(
   displayName: string
 ) {
   const nextTurn = resolveNextTurnState(game, players, playerId);
+
+  if (nextTurn.wrapped) {
+    resolveRoundAndStartNextTurn(transaction, gameId, game, players);
+    return;
+  }
+
   transaction.update(gameDocRef(gameId), nextTurn.nextState);
   appendLog(transaction, gameId, {
-    message: nextTurn.wrapped
-      ? `Round ${game.round} turns complete. Entering upkeep.`
-      : `${displayName} completed an action. Turn advanced.`,
+    message: `${displayName} completed an action. Turn advanced.`,
     playerId,
     type: "action"
   });
@@ -192,9 +196,74 @@ function resolveNextTurnState(game: Omit<GameDoc, "id">, players: QueryDocumentS
   return {
     wrapped,
     nextState: wrapped
-      ? { phase: "upkeep" as const, activePlayerId: null, turnIndex: 0, remainingActions: ACTIONS_PER_TURN, availableActions: TURN_ACTION_CHOICES, upkeepEventResponses: {} }
+      ? { activePlayerId: order[0] ?? players[0]?.id ?? null, turnIndex: 0, remainingActions: ACTIONS_PER_TURN, availableActions: TURN_ACTION_CHOICES }
       : { activePlayerId: order[nextIndex], turnIndex: nextIndex, remainingActions: ACTIONS_PER_TURN, availableActions: TURN_ACTION_CHOICES }
   };
+}
+
+function resolveRoundAndStartNextTurn(transaction: Transaction, gameId: string, gameData: Omit<GameDoc, "id">, players: QueryDocumentSnapshot<Omit<PlayerDoc, "id">>[]) {
+  assert(players.length > 0, "No players found.");
+
+  const orderedPlayers = players.map((snapshot) => ({ id: snapshot.id, ...snapshot.data() }));
+  const roundEndResults = resolveRoundEndUpkeepStartAbilities(orderedPlayers);
+
+  roundEndResults.forEach((result) => {
+    result.logs.forEach((trigger) => {
+      appendLog(transaction, gameId, {
+        message: `${getPlantDisplayName(trigger.plantId)} (slot ${trigger.slotIndex + 1}) ${trigger.message}`,
+        playerId: result.player.id,
+        type: "system"
+      });
+    });
+  });
+
+  const updatedPlayers = roundEndResults.map((result) => {
+    const afterDecay = applyPlantDecayAndDeaths(result.player);
+    const afterAdjacentBonuses = applyAdjacentPairBonuses(afterDecay);
+    const afterResourcePressure = applyResourcePressureCaps(afterAdjacentBonuses);
+
+    return {
+      ...afterResourcePressure,
+      resources: {
+        ...afterResourcePressure.resources,
+        water: afterResourcePressure.resources.water + 1
+      }
+    };
+  });
+
+  const nextRound = gameData.round + 1;
+  const isGameOver = nextRound > gameData.roundsTotal;
+
+  updatedPlayers.forEach((player) => {
+    const scoreBreakdown = isGameOver ? computePlayerScoreBreakdown(player) : player.scoreBreakdown ?? null;
+
+    transaction.update(playerDocRef(gameId, player.id), {
+      gardenSlots: player.gardenSlots,
+      resources: player.resources,
+      score: isGameOver ? scoreBreakdown.total : player.score,
+      scoreBreakdown,
+      abilityUsage: player.abilityUsage ?? {}
+    });
+  });
+
+  transaction.update(gameDocRef(gameId), {
+    phase: isGameOver ? "ended" : "turns",
+    status: isGameOver ? "ended" : gameData.status,
+    activePlayerId: isGameOver ? null : gameData.playerOrder[0] ?? players[0]?.id ?? null,
+    turnIndex: 0,
+    remainingActions: ACTIONS_PER_TURN,
+    availableActions: TURN_ACTION_CHOICES,
+    round: isGameOver ? gameData.round : nextRound,
+    upkeepEventResponses: {},
+    lastPhaseResolvedRound: gameData.round
+  });
+
+  appendLog(transaction, gameId, {
+    message: isGameOver
+      ? `Round ${gameData.round} resolved. Game ended.`
+      : `Round ${gameData.round} resolved. Round ${nextRound} turns begin.`,
+    type: "system"
+  });
 }
 
 function getSlotsForAction(action: TurnActionChoice) {
@@ -273,7 +342,6 @@ async function takeRowActionTx(gameId: string, uid: string, action: TurnActionCh
     });
 
     const nextTurn = resolveNextTurnState(gameData, players, playerSnap.id);
-    transaction.update(gameDocRef(gameId), nextTurn.nextState);
 
     appendLog(transaction, gameId, {
       message: `${playerData.displayName} took ${action} at level ${level} and ended their turn.`,
@@ -287,10 +355,16 @@ async function takeRowActionTx(gameId: string, uid: string, action: TurnActionCh
         type: "action"
       });
     });
+
+    if (nextTurn.wrapped) {
+      resolveRoundAndStartNextTurn(transaction, gameId, gameData, players);
+      return;
+    }
+
+    transaction.update(gameDocRef(gameId), nextTurn.nextState);
+
     appendLog(transaction, gameId, {
-      message: nextTurn.wrapped
-        ? `Round ${gameData.round} turns complete. Entering upkeep.`
-        : `${playerData.displayName} completed ${action}. Turn advanced.`,
+      message: `${playerData.displayName} completed ${action}. Turn advanced.`,
       playerId: playerSnap.id,
       type: "action"
     });
@@ -875,94 +949,17 @@ export async function advanceTurnOrRoundTx(gameId: string, uid: string) {
 
     const nextTurn = resolveNextTurnState(gameData, players, currentPlayerSnap.id);
 
+    if (nextTurn.wrapped) {
+      resolveRoundAndStartNextTurn(transaction, gameId, gameData, players);
+      return;
+    }
+
     transaction.update(gameRef, nextTurn.nextState);
 
     appendLog(transaction, gameId, {
-      message: nextTurn.wrapped
-        ? `Round ${gameData.round} turns complete. Entering upkeep.`
-        : `${currentPlayerSnap.data().displayName} ended their turn.`,
+      message: `${currentPlayerSnap.data().displayName} ended their turn.`,
       playerId: currentPlayerSnap.id,
       type: "action"
-    });
-  });
-}
-
-export async function resolveRoundUpkeepTx(gameId: string, uid: string) {
-  const players = await getOrderedPlayers(gameId);
-
-  return runTransaction(firestore, async (transaction) => {
-    const gameRef = gameDocRef(gameId);
-    const gameSnap = await transaction.get(gameRef);
-    assert(gameSnap.exists(), "Game not found.");
-
-    const gameData = gameSnap.data();
-    assert(gameData.phase === "upkeep", "Round upkeep can only be resolved during upkeep phase.");
-    assert(gameData.lastPhaseResolvedRound !== gameData.round, "Upkeep already resolved for this round.");
-    assert(players.length > 0, "No players found.");
-
-    const hostSnap = players.find((snapshot) => snapshot.id === gameData.hostPlayerId);
-    assert(hostSnap, "Host player not found.");
-    assert(hostSnap.data().uid === uid, "Only the host can resolve upkeep.");
-
-    const orderedPlayers = players.map((snapshot) => ({ id: snapshot.id, ...snapshot.data() }));
-    const roundEndResults = resolveRoundEndUpkeepStartAbilities(orderedPlayers);
-
-    roundEndResults.forEach((result) => {
-      result.logs.forEach((trigger) => {
-        appendLog(transaction, gameId, {
-          message: `${getPlantDisplayName(trigger.plantId)} (slot ${trigger.slotIndex + 1}) ${trigger.message}`,
-          playerId: result.player.id,
-          type: "system"
-        });
-      });
-    });
-
-    const updatedPlayers = roundEndResults.map((result) => {
-      const afterDecay = applyPlantDecayAndDeaths(result.player);
-      const afterAdjacentBonuses = applyAdjacentPairBonuses(afterDecay);
-      const afterResourcePressure = applyResourcePressureCaps(afterAdjacentBonuses);
-
-      return {
-        ...afterResourcePressure,
-        resources: {
-          ...afterResourcePressure.resources,
-          water: afterResourcePressure.resources.water + 1
-        }
-      };
-    });
-
-    const nextRound = gameData.round + 1;
-    const isGameOver = nextRound > gameData.roundsTotal;
-
-    updatedPlayers.forEach((player) => {
-      const scoreBreakdown = isGameOver ? computePlayerScoreBreakdown(player) : player.scoreBreakdown ?? null;
-
-      transaction.update(playerDocRef(gameId, player.id), {
-        gardenSlots: player.gardenSlots,
-        resources: player.resources,
-        score: isGameOver ? scoreBreakdown.total : player.score,
-        scoreBreakdown,
-        abilityUsage: player.abilityUsage ?? {}
-      });
-    });
-
-    transaction.update(gameRef, {
-      phase: isGameOver ? "ended" : "turns",
-      status: isGameOver ? "ended" : gameData.status,
-      activePlayerId: isGameOver ? null : gameData.playerOrder[0] ?? players[0]?.id ?? null,
-      turnIndex: 0,
-      remainingActions: ACTIONS_PER_TURN,
-      availableActions: TURN_ACTION_CHOICES,
-      round: isGameOver ? gameData.round : nextRound,
-      upkeepEventResponses: {},
-      lastPhaseResolvedRound: gameData.round
-    });
-
-    appendLog(transaction, gameId, {
-      message: isGameOver
-        ? `Round ${gameData.round} upkeep resolved. Game ended.`
-        : `Round ${gameData.round} upkeep resolved. Round ${nextRound} turns begin.`,
-      type: "system"
     });
   });
 }
