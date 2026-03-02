@@ -4,23 +4,24 @@ export type Phase = "lobby" | "setup" | "turns" | "upkeep" | "ended";
 
 export type GardenSlotState = "empty" | "grown" | "withered";
 
-export type BiomeName = "desert" | "plains" | "rainforest";
+export type BiomeName = "understory" | "desert" | "meadow" | "canopy";
 
 export interface GardenSlot {
   state: GardenSlotState;
   plantId: string | null;
-  water?: number;
+  sunlight: number;
+  sunlightCapacity: number;
 }
 
-export type ResourceKey = "water" | "seeds" | "buds" | "flowers" | "bugs";
+export type RootResourceKey = "water" | "nutrients" | "seeds" | "compost";
+export type ResourceKey = RootResourceKey | "sunlight";
 export type TurnActionChoice = "grow" | "root" | "toTheSun" | "pollinate";
 
 export interface PlayerResources {
   water: number;
+  nutrients: number;
   seeds: number;
-  buds: number;
-  flowers: number;
-  bugs: number;
+  compost: number;
 }
 
 export interface PlantCard {
@@ -29,8 +30,8 @@ export interface PlantCard {
   points: number;
   biome?: BiomeName | BiomeName[];
   level?: 1 | 2 | 3 | 4 | 5 | 6;
-  sunCost?: number;
-  sunCapacity?: number;
+  sunlightCost?: number;
+  sunlightCapacity?: number;
   engineSummary?: string;
   flavorText?: string;
 }
