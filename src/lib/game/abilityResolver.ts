@@ -1,6 +1,7 @@
 import { BIOME_SLOT_INDICES } from "@/lib/game/constants";
 import { CARD_POWERS } from "@/lib/game/powers/cardPowers";
 import { executeTriggerForPlant } from "@/lib/game/powers/interpreter";
+import type { ActivateRow, TriggerKind } from "@/lib/game/powers/types";
 import type { EventCard, GardenSlot, PlayerDoc } from "@/lib/game/types";
 
 export interface AbilityTriggerLog {
@@ -33,7 +34,7 @@ function normalizeGardenSlots(player: PlayerDoc): GardenSlot[] {
   });
 }
 
-function rowForSlot(slotIndex: number): "root" | "pollinate" | "toTheSun" {
+function rowForSlot(slotIndex: number): ActivateRow {
   if (BIOME_SLOT_INDICES.desert.includes(slotIndex)) {
     return "root";
   }
@@ -43,62 +44,57 @@ function rowForSlot(slotIndex: number): "root" | "pollinate" | "toTheSun" {
   return "toTheSun";
 }
 
-function executeTrigger(player: PlayerDoc, slotIndex: number, kind: "onActivate" | "onPlay" | "onMature", row?: "root" | "pollinate" | "toTheSun") {
+function runDslTrigger(player: PlayerDoc, slotIndex: number, kind: TriggerKind, row?: ActivateRow): AbilityResolutionResult {
   const slots = normalizeGardenSlots(player);
   const slot = slots[slotIndex];
   if (!slot?.plantId || slot.state !== "grown") {
     return { player, logs: [] };
   }
 
-  const powerDefs = CARD_POWERS[slot.plantId] ?? [];
-  if (powerDefs.length === 0) {
+  const powers = (CARD_POWERS[slot.plantId] ?? []).filter(
+    (power) => power.trigger.kind === kind && (kind !== "onActivate" || power.trigger.row === row)
+  );
+  if (powers.length === 0) {
     return { player, logs: [] };
   }
 
-  const runtimePlayer = {
-    id: player.id,
-    resources: { ...(player.resources as unknown as Record<string, number>) },
-    score: player.score,
-    hand: [...player.hand]
-  };
-
-  const runtimePlant = {
-    id: slot.plantId,
-    biome: row,
-    sunlight: slot.water ?? 0,
-    sunlightCapacity: 99,
-    tucked: [],
-    mature: false
-  } as const;
-
-  const executed = executeTriggerForPlant(kind, slot.plantId, {
-    player: runtimePlayer,
-    selfPlant: { ...runtimePlant, tucked: [] },
-    gameState: { deck: [], tray: [], players: [] },
-    powersByPlantId: CARD_POWERS
-  }, row);
+  const executed = executeTriggerForPlant(
+    kind,
+    slot.plantId,
+    {
+      player: {
+        id: player.id,
+        resources: { ...(player.resources as unknown as Record<string, number>) },
+        score: player.score,
+        hand: [...player.hand]
+      },
+      selfPlant: {
+        id: slot.plantId,
+        biome: row,
+        sunlight: slot.water ?? 0,
+        sunlightCapacity: 99,
+        tucked: [],
+        mature: false
+      },
+      gameState: { deck: [], tray: [], players: [] },
+      powersByPlantId: CARD_POWERS
+    },
+    row
+  );
 
   const updatedSlots = [...slots];
   updatedSlots[slotIndex] = { ...slot, water: executed.selfPlant.sunlight };
 
-  const nextPlayer: PlayerDoc = {
-    ...player,
-    resources: { ...player.resources, ...(executed.player.resources as unknown as PlayerDoc["resources"]) },
-    score: executed.player.score,
-    hand: executed.player.hand,
-    gardenSlots: updatedSlots
+  return {
+    player: {
+      ...player,
+      resources: { ...player.resources, ...(executed.player.resources as unknown as PlayerDoc["resources"]) },
+      score: executed.player.score,
+      hand: executed.player.hand,
+      gardenSlots: updatedSlots
+    },
+    logs: powers.map((power) => ({ abilityId: power.id, message: `triggered ${power.id}`, plantId: slot.plantId as string, slotIndex }))
   };
-
-  const logs: AbilityTriggerLog[] = powerDefs
-    .filter((power) => power.trigger.kind === kind)
-    .map((power) => ({
-      abilityId: power.id,
-      message: `triggered ${power.id}`,
-      plantId: slot.plantId as string,
-      slotIndex
-    }));
-
-  return { player: nextPlayer, logs };
 }
 
 export function resolveRoundEndAbilityWindow(player: PlayerDoc): AbilityResolutionResult {
@@ -110,16 +106,17 @@ export function resolveEventReactionWindow(player: PlayerDoc, _event: EventCard)
 }
 
 export function resolveOnPlayWindow(player: PlayerDoc, slotIndex: number): AbilityResolutionResult {
-  return executeTrigger(player, slotIndex, "onPlay");
+  return runDslTrigger(player, slotIndex, "onPlay");
 }
 
 export function resolveOnMatureWindow(player: PlayerDoc, slotIndex: number): AbilityResolutionResult {
-  return executeTrigger(player, slotIndex, "onMature");
+  return runDslTrigger(player, slotIndex, "onMature");
 }
 
+// Row activations now execute directly from action resolution through executeTriggerForPlant.
 export function resolveOncePerTurnActivation(player: PlayerDoc, slotIndex: number, _round: number): ActivationResult {
   const row = rowForSlot(slotIndex);
-  const resolved = executeTrigger(player, slotIndex, "onActivate", row);
+  const resolved = runDslTrigger(player, slotIndex, "onActivate", row);
 
   return {
     ...resolved,
