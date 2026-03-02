@@ -1,9 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import dustcap from "../../../../../fixtures/powers/dustcap.json";
-import gravecap from "../../../../../fixtures/powers/gravecap.json";
-import veilspore from "../../../../../fixtures/powers/veilspore.json";
+import pollinateDraw2Tuck1 from "../../../../../fixtures/powers/pollinate_draw2_tuck1.json";
+import rootSpendCompostDraw2 from "../../../../../fixtures/powers/root_spend_compost_draw2.json";
+import rootTuckHandGainCompost from "../../../../../fixtures/powers/root_tuck_hand_gain_compost.json";
 import { executePower } from "../interpreter";
 import { validatePowerSchema } from "../schemaValidator";
 import type { ExecutePowerContext, PowerDsl } from "../types";
@@ -38,27 +38,27 @@ test("schema validator returns path + reason errors", () => {
 });
 
 test("schema validator accepts fixtures", () => {
-  [dustcap, gravecap, veilspore].forEach((fixture) => {
+  [rootSpendCompostDraw2, rootTuckHandGainCompost, pollinateDraw2Tuck1].forEach((fixture) => {
     const result = validatePowerSchema(fixture);
     assert.equal(result.valid, true, result.errors.join("\n"));
   });
 });
 
 test("Dustcap Mycelium: spend compost -> draw 2", () => {
-  const result = executePower(dustcap as PowerDsl, baseContext());
+  const result = executePower(rootSpendCompostDraw2 as PowerDsl, baseContext());
   assert.equal(result.player.resources.compost, 0);
   assert.deepEqual(result.player.hand, ["h1", "h2", "d1", "d2"]);
 });
 
 test("Gravecap Recycler: tuck from hand -> gain compost", () => {
-  const result = executePower(gravecap as PowerDsl, baseContext());
+  const result = executePower(rootTuckHandGainCompost as PowerDsl, baseContext());
   assert.deepEqual(result.selfPlant.tucked, ["h1"]);
   assert.deepEqual(result.player.hand, ["h2"]);
   assert.equal(result.player.resources.compost, 2);
 });
 
 test("Veilspore Archivist: draw 2 then tuck 1", () => {
-  const result = executePower(veilspore as PowerDsl, baseContext());
+  const result = executePower(pollinateDraw2Tuck1 as PowerDsl, baseContext());
   assert.deepEqual(result.player.hand, ["h2", "d1", "d2"]);
   assert.deepEqual(result.selfPlant.tucked, ["h1"]);
 });
