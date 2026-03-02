@@ -11,27 +11,27 @@ export interface PlantEngineProfile {
 }
 
 const PLAINS_ENGINE_LINES = [
-  "Draw 1 card.",
-  "Draw 1 card and gain 1 sun token.",
-  "Draw 1 card and gain 1 water token.",
-  "Draw 2 cards, then discard 1 card.",
-  "Draw 1 card, then tuck 1 card from your hand."
+  "Pollinate — Draw 1 plant card.",
+  "Pollinate — Draw 2 plant cards, then discard 1 card.",
+  "Pollinate — Draw 1 plant card and gain 1 seed.",
+  "Pollinate — Draw 2 plant cards.",
+  "Pollinate — Draw 2 plant cards, then tuck 1 card from your hand."
 ] as const;
 
 const DESERT_ENGINE_LINES = [
-  "Gain 1 sun token.",
-  "Gain 2 sun tokens.",
-  "Gain 1 sun token and convert 1 water into 1 sun.",
-  "Gain 1 sun token per Desert plant (max 3).",
-  "Spend 1 sun to gain 2 sun and draw 1 card."
+  "To the Sun — Gain 1 sunlight token and place it on a Desert plant.",
+  "To the Sun — Gain 2 sunlight tokens and distribute them across Desert plants.",
+  "To the Sun — Gain 1 sunlight token per planted Desert card (max 3).",
+  "To the Sun — Move 1 sunlight from one Desert plant to another, then gain 1 sunlight.",
+  "To the Sun — Gain 3 sunlight tokens; fully grown plants may trigger mature effects."
 ] as const;
 
 const RAINFOREST_ENGINE_LINES = [
-  "Gain 1 rain token.",
-  "Gain 2 rain tokens.",
-  "Gain 1 rain and draw 1 card.",
-  "Gain 1 rain token per Rainforest plant (max 3).",
-  "Gain 1 rain and 1 sun token."
+  "Root — Gain 1 resource of your choice (water, nutrients, seeds, or compost).",
+  "Root — Gain 2 mixed root resources.",
+  "Root — Gain 1 compost and 1 water.",
+  "Root — Gain 1 resource per Understory plant (max 3).",
+  "Root — Gain 2 resources, then you may tuck 1 card from your hand."
 ] as const;
 
 function deriveBiome(cardId: string): BiomeName {
@@ -81,12 +81,7 @@ function deriveSunCapacity(biome: BiomeName, level: PlantEngineProfile["level"])
 
 function deriveEngineSummary(card: PlantCard, cardIndexWithinBiome: number, biome: BiomeName) {
   const source = biome === "plains" ? PLAINS_ENGINE_LINES : biome === "desert" ? DESERT_ENGINE_LINES : RAINFOREST_ENGINE_LINES;
-  const baseLine = source[cardIndexWithinBiome % source.length];
-  if (biome !== "desert") {
-    return baseLine;
-  }
-
-  return `${baseLine} Sun is required to play level 2-6 plants.`;
+  return source[cardIndexWithinBiome % source.length];
 }
 
 const profilesById = new Map<string, PlantEngineProfile>();

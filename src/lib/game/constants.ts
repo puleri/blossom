@@ -18,8 +18,8 @@ export const BIOME_SLOT_INDICES = {
 
 export const BIOME_LABELS = {
   desert: "Desert",
-  plains: "Plains",
-  rainforest: "Rainforest"
+  plains: "Meadow",
+  rainforest: "Understory"
 } as const;
 
 export const SETUP_STARTING_RESOURCES = {

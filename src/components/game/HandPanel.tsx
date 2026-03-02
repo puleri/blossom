@@ -1,5 +1,5 @@
 import { ReactNode, useState } from "react";
-import { getPlantCardById } from "@/lib/game/cards/details";
+import { getPlantCardById, getPlantFlavorText } from "@/lib/game/cards/details";
 import { getPlantEngineProfile } from "@/lib/game/cards/engineProfiles";
 import { getPlantSchoolBorderColor } from "@/lib/game/cards/schools";
 import { BIOME_LABELS } from "@/lib/game/constants";
@@ -64,11 +64,14 @@ export function HandPanel({ hand, canPlant = false, busyAction = null, available
                     </p>
                     {profile ? (
                       <p style={{ margin: "6px 0", fontSize: 12 }}>
-                        {profile.biome.toUpperCase()} · L{profile.level} · Sun cost {profile.sunCost}/{profile.sunCapacity}
+                        {BIOME_LABELS[profile.biome]} · L{profile.level} · Sun cost {profile.sunCost}/{profile.sunCapacity}
                       </p>
                     ) : null}
                     <p style={{ margin: "6px 0", fontSize: 12 }}>
                       Engine: {profile?.engineSummary}
+                    </p>
+                    <p style={{ margin: "6px 0", fontSize: 12, fontStyle: "italic", color: "#4b5563" }}>
+                      “{getPlantFlavorText(card.id)}”
                     </p>
 
                     {canPlant && onPlantFromHand ? (

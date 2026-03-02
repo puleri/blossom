@@ -323,7 +323,7 @@ export default function GamePage({ params }: GamePageProps) {
                   <p>Actions remaining: {remainingTurnActions}</p>
 
                   {actionsExhausted ? <p>No actions left. Your turn will advance automatically.</p> : null}
-                  {!actionsExhausted ? <p style={{ marginTop: 8 }}>Hover a card in your hand to plant it in an open biome slot. Available actions: Plant, Activate Desert, Activate Plains, Activate Rainforest, Well, Draw, Harvest, Force Bloom, Pass.</p> : null}
+                  {!actionsExhausted ? <p style={{ marginTop: 8 }}>Hover a card in your hand to plant it in an open biome slot. Available actions: Plant, Activate Desert (To the Sun), Activate Meadow (Pollinate), Activate Understory (Root), Well, Draw, Harvest, Force Bloom, Pass.</p> : null}
 
                   {!actionsExhausted && plantableBiomes.length === 0 ? <p>All biome rows are full. You cannot plant until a slot opens up.</p> : null}
 
@@ -349,7 +349,7 @@ export default function GamePage({ params }: GamePageProps) {
                       }
                       disabled={Boolean(busyAction) || actionsExhausted}
                     >
-                      {busyAction === "activate-plains" ? "Activating..." : "Activate Plains biome"}
+                      {busyAction === "activate-plains" ? "Activating..." : "Activate Meadow biome"}
                     </button>
 
                     <button
@@ -361,7 +361,7 @@ export default function GamePage({ params }: GamePageProps) {
                       }
                       disabled={Boolean(busyAction) || actionsExhausted}
                     >
-                      {busyAction === "activate-rainforest" ? "Activating..." : "Activate Rainforest biome"}
+                      {busyAction === "activate-rainforest" ? "Activating..." : "Activate Understory biome"}
                     </button>
 
                   </div>

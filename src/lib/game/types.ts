@@ -31,6 +31,7 @@ export interface PlantCard {
   sunCost?: number;
   sunCapacity?: number;
   engineSummary?: string;
+  flavorText?: string;
 }
 
 export type EventTag = "weather" | "pest" | "pollination";

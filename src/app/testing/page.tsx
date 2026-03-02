@@ -9,6 +9,7 @@ import { PlayerList } from "@/components/game/PlayerList";
 import { EVENT_CARDS } from "@/lib/game/cards/events";
 import { PLANT_CARDS } from "@/lib/game/cards/plants";
 import { getCardsByBiome, getPlantEngineProfile } from "@/lib/game/cards/engineProfiles";
+import { getPlantFlavorText } from "@/lib/game/cards/details";
 import { drawFromDeck, revealNextEvent } from "@/lib/game/decks";
 import {
   applyAdjacentPairBonuses,
@@ -353,11 +354,11 @@ export default function TestingPage() {
 
       <section>
         <h2>Plant card library (Wingspan-style lanes)</h2>
-        <p>Plains engines focus on drawing cards, Desert engines generate sun for level 2-6 plays, and Rainforest engines generate rain tokens (food equivalent).</p>
+        <p>Desert is the growth axis (To the Sun), Meadow is the draw axis (Pollinate), and Understory is the resource axis (Root).</p>
         <div style={{ display: "grid", gap: 12 }}>
-          {(["plains", "desert", "rainforest"] as const).map((biome) => (
-            <article key={biome} style={{ border: "1px solid #d1d5db", borderRadius: 10, padding: 12, background: "#ffffff" }}>
-              <h3 style={{ margin: 0, color: "#111827", textTransform: "capitalize" }}>{biome}</h3>
+          {(["desert", "plains", "rainforest"] as const).map((biome) => (
+            <article key={biome === "plains" ? "meadow" : biome === "rainforest" ? "understory" : biome} style={{ border: "1px solid #d1d5db", borderRadius: 10, padding: 12, background: "#ffffff" }}>
+              <h3 style={{ margin: 0, color: "#111827", textTransform: "capitalize" }}>{biome === "plains" ? "meadow" : biome === "rainforest" ? "understory" : biome}</h3>
               <div style={{ display: "grid", gap: 8, marginTop: 10 }}>
                 {cardsByBiome[biome].map((card) => {
                   const profile = getPlantEngineProfile(card.id);
@@ -367,6 +368,7 @@ export default function TestingPage() {
                     <div key={card.id} style={{ border: "1px solid #e5e7eb", borderRadius: 8, padding: 8, color: "#1f2937" }}>
                       <strong>{card.name}</strong> · Level {profile.level} · Sun cost {profile.sunCost}
                       <p style={{ margin: "4px 0 0", fontSize: 13 }}>{profile.engineSummary}</p>
+                      <p style={{ margin: "4px 0 0", fontSize: 12, fontStyle: "italic", color: "#4b5563" }}>“{getPlantFlavorText(card.id)}”</p>
                     </div>
                   );
                 })}
