@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "test": "rm -rf .tmp-test && tsc --module commonjs --target es2020 --esModuleInterop --resolveJsonModule --outDir .tmp-test src/lib/game/powers/types.ts src/lib/game/powers/schemaValidator.ts src/lib/game/powers/interpreter.ts src/lib/game/powers/__tests__/powers.test.ts && node --test .tmp-test/src/lib/game/powers/__tests__/powers.test.js"
+    "test": "rm -rf .tmp-test && tsc --module commonjs --target es2020 --esModuleInterop --resolveJsonModule --outDir .tmp-test src/lib/game/cards/wingspanReskinMap.ts src/lib/game/powers/types.ts src/lib/game/powers/schemaValidator.ts src/lib/game/powers/interpreter.ts src/lib/game/powers/cardPowers.ts src/lib/game/powers/__tests__/powers.test.ts src/lib/game/powers/__tests__/wingspanReskinMap.test.ts && node --test .tmp-test/src/lib/game/powers/__tests__/powers.test.js .tmp-test/src/lib/game/powers/__tests__/wingspanReskinMap.test.js"
   },
   "dependencies": {
     "firebase": "^10.12.5",
