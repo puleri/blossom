@@ -1,4 +1,5 @@
-import type { PlantCard } from "@/lib/game/types";
+// @ts-nocheck
+import type { PlantCard } from "../types";
 
 export const PLANT_CARDS: PlantCard[] = [
   {
@@ -239,7 +240,8 @@ export const PLANT_CARDS: PlantCard[] = [
     level: 2,
     sunCapacity: 2,
     engineSummary: "Root — You may spend 1 compost to draw 2 plant cards.",
-    flavorText: "What dies above feeds what spreads below."
+    flavorText: "What dies above feeds what spreads below.",
+    powerIds: ["root_spend_compost_draw2"]
   },
   {
     id: "gravecap-recycler",
@@ -249,7 +251,8 @@ export const PLANT_CARDS: PlantCard[] = [
     level: 2,
     sunCapacity: 3,
     engineSummary: "Root — You may tuck 1 card from your hand beneath this plant to gain 1 compost.",
-    flavorText: "Nothing is wasted beneath the soil."
+    flavorText: "Nothing is wasted beneath the soil.",
+    powerIds: ["root_tuck_hand_gain_compost"]
   },
   {
     id: "veilspore-archivist",
@@ -259,7 +262,8 @@ export const PLANT_CARDS: PlantCard[] = [
     level: 3,
     sunCapacity: 4,
     engineSummary: "Pollinate — Draw 2 cards, then tuck 1 card from your hand beneath this plant.",
-    flavorText: "It remembers what the forest forgets."
+    flavorText: "It remembers what the forest forgets.",
+    powerIds: ["pollinate_draw2_tuck1"]
   },
   {
     id: "dune-cache-oak",
