@@ -149,7 +149,10 @@ export default function GamePage({ params }: GamePageProps) {
 
     return (Object.keys(BIOME_SLOT_INDICES) as BiomeName[]).filter((biome) => {
       const biomeSlots = BIOME_SLOT_INDICES[biome];
-      return biomeSlots.some((index) => currentPlayer.gardenSlots[index]?.state === "empty");
+      return biomeSlots.some((index) => {
+        const slotState = currentPlayer.gardenSlots[index]?.state;
+        return slotState === "empty" || slotState === "withered";
+      });
     });
   }, [currentPlayer]);
 
