@@ -6,17 +6,13 @@ import { GameLog } from "@/components/game/GameLog";
 import { GardenTableau } from "@/components/game/GardenTableau";
 import { HandPanel } from "@/components/game/HandPanel";
 import { PlayerList } from "@/components/game/PlayerList";
-import { EVENT_CARDS } from "@/lib/game/cards/events";
 import { PLANT_CARDS } from "@/lib/game/cards/plants";
 import { getCardsByBiome, getPlantEngineProfile } from "@/lib/game/cards/engineProfiles";
 import { getPlantFlavorText } from "@/lib/game/cards/details";
-import { drawFromDeck, revealNextEvent } from "@/lib/game/decks";
+import { drawFromDeck } from "@/lib/game/decks";
 import {
   applyAdjacentPairBonuses,
-  applyEventToPlayers,
-  applyEventToPlayersWithReactions,
   applyPlantDecayAndDeaths,
-  collectBudTokens,
   computePlayerScore,
   resolveRoundEndUpkeepStartAbilities
 } from "@/lib/game/engine";
@@ -38,7 +34,6 @@ export default function TestingPage() {
   const isMyTurn = Boolean(currentPlayer && game.phase === "turns" && game.activePlayerId === currentPlayer.id);
   const isHost = Boolean(currentPlayer && currentPlayer.id === game.hostPlayerId);
   const currentPlant = PLANT_CARDS.find((plant) => plant.id === selectedPlantId) ?? null;
-  const currentEvent = EVENT_CARDS.find((event) => event.id === game.currentEventId) ?? null;
 
   const cardsByBiome = useMemo(() => getCardsByBiome(), []);
 
@@ -222,18 +217,17 @@ export default function TestingPage() {
       const updatedPlayersAfterUpkeep = players.map((player) => {
         const afterDecay = applyPlantDecayAndDeaths(player);
         const afterAdjacentBonuses = applyAdjacentPairBonuses(afterDecay);
-        const afterBudCollection = collectBudTokens(afterAdjacentBonuses);
 
         return {
-          ...afterBudCollection,
+          ...afterAdjacentBonuses,
           resources: {
-            ...afterBudCollection.resources,
-            water: afterBudCollection.resources.water + 1
+            ...afterAdjacentBonuses.resources,
+            water: afterAdjacentBonuses.resources.water + 1
           }
         };
       });
 
-      const nextPlayers = currentEvent ? applyEventToPlayers(updatedPlayersAfterUpkeep, currentEvent) : updatedPlayersAfterUpkeep;
+      const nextPlayers = updatedPlayersAfterUpkeep;
       const nextRound = game.round + 1;
       const isGameOver = nextRound > game.roundsTotal;
 
@@ -253,90 +247,12 @@ export default function TestingPage() {
           turnIndex: 0,
           lastPhaseResolvedRound: previous.round
         }));
-        addLog(`Round ${game.round} upkeep and event resolved. Game ended.`);
+        addLog(`Round ${game.round} upkeep resolved. Game ended.`);
         return;
       }
-
-      const reveal = revealNextEvent(game.eventDeck);
-      if (!reveal.event) {
-        throw new Error("No events remaining in the event deck.");
-      }
-
-      setGame((previous) => ({
-        ...previous,
-        phase: "turns",
-        round: nextRound,
-        activePlayerId: previous.playerOrder[0] ?? null,
-        turnIndex: 0,
-        currentEventId: reveal.event?.id ?? null,
-        eventDeck: reveal.remainingDeck,
-        lastPhaseResolvedRound: previous.round
-      }));
-
-      addLog(`Round ${game.round} upkeep resolved, then event resolved. Round ${nextRound} turns begin.`);
-      addLog(`Round ${nextRound} event drawn: ${reveal.event.name}. It resolves at round end.`);
+      addLog(`Round ${game.round} upkeep resolved. Round ${nextRound} turns begin.`);
     });
   }
-
-
-  const carnivorousSnapshots = useMemo(() => {
-    const baseline: PlayerDoc = {
-      ...GAME_TEST_DATA.players[0],
-      resources: { ...GAME_TEST_DATA.players[0].resources, flowers: 3, bugs: 2 }
-    };
-
-    const flytrapPlayer: PlayerDoc = {
-      ...GAME_TEST_DATA.players[0],
-      resources: { ...GAME_TEST_DATA.players[0].resources, seeds: 1, bugs: 1 },
-      gardenSlots: [
-        { state: "grown", plantId: "venus-flytrap", water: 2 },
-        { state: "empty", plantId: null, water: 0 },
-        { state: "empty", plantId: null, water: 0 },
-        { state: "empty", plantId: null, water: 0 },
-        { state: "empty", plantId: null, water: 0 }
-      ]
-    };
-
-    const pitcherPlayer: PlayerDoc = {
-      ...GAME_TEST_DATA.players[0],
-      resources: { ...GAME_TEST_DATA.players[0].resources, seeds: 1, flowers: 0, bugs: 3 },
-      gardenSlots: [
-        { state: "grown", plantId: "pitcher-plant", water: 2 },
-        { state: "empty", plantId: null, water: 0 },
-        { state: "empty", plantId: null, water: 0 },
-        { state: "empty", plantId: null, water: 0 },
-        { state: "empty", plantId: null, water: 0 }
-      ]
-    };
-
-    const infestation = EVENT_CARDS.find((event) => event.id === "infestation");
-    if (!infestation) return [];
-
-    const baselineAfterEvent = applyEventToPlayers([baseline], infestation)[0];
-    const flytrapAfterReaction = applyEventToPlayersWithReactions([flytrapPlayer], infestation).players[0];
-    const pitcherAfterHunt = resolveRoundEndUpkeepStartAbilities([pitcherPlayer])[0].player;
-
-    return [
-      {
-        label: "Baseline infestation pressure",
-        before: baseline.resources,
-        after: baselineAfterEvent.resources,
-        scorePreview: computePlayerScore(baselineAfterEvent)
-      },
-      {
-        label: "Venus Flytrap adapts to infestation",
-        before: flytrapPlayer.resources,
-        after: flytrapAfterReaction.resources,
-        scorePreview: computePlayerScore(flytrapAfterReaction)
-      },
-      {
-        label: "Pitcher Plant adjacency engine",
-        before: pitcherPlayer.resources,
-        after: pitcherAfterHunt.resources,
-        scorePreview: computePlayerScore(pitcherAfterHunt)
-      }
-    ];
-  }, []);
 
   return (
     <main>
@@ -345,12 +261,6 @@ export default function TestingPage() {
 
       <GameHeader game={game} playerCount={players.length} />
       <PlayerList players={players} activePlayerId={game.activePlayerId} />
-
-      {currentEvent ? (
-        <p>
-          Round event in play: <strong>{currentEvent.name}</strong> — {currentEvent.description}
-        </p>
-      ) : null}
 
       <section>
         <h2>Plant card library (Wingspan-style lanes)</h2>
@@ -377,19 +287,6 @@ export default function TestingPage() {
           ))}
         </div>
       </section>
-
-      <section>
-        <h2>Carnivorous engine snapshots</h2>
-        <p>Representative board states for validating that Carnivorous plants convert infestation pressure into scaling bug economy.</p>
-        <ul>
-          {carnivorousSnapshots.map((snapshot) => (
-            <li key={snapshot.label}>
-              <strong>{snapshot.label}</strong>: before (Seeds {snapshot.before.seeds}, Flowers {snapshot.before.flowers}, Bugs {snapshot.before.bugs}) → after (Seeds {snapshot.after.seeds}, Flowers {snapshot.after.flowers}, Bugs {snapshot.after.bugs}), score preview {snapshot.scorePreview}.
-            </li>
-          ))}
-        </ul>
-      </section>
-
 
       {currentPlayer ? <HandPanel hand={currentPlayer.hand} /> : null}
       {currentPlayer ? <GardenTableau slots={currentPlayer.gardenSlots} /> : null}

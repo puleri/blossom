@@ -15,10 +15,8 @@ import {
   activateRainforestBiomeTx,
   resolveRoundUpkeepTx,
   sowPlantTx,
-  submitUpkeepEventResponseTx,
   submitSetupKeepTx,
 } from "@/lib/game/actions";
-import { EVENT_CARDS } from "@/lib/game/cards/events";
 import { getPlantCardById, getPlantSummaryLabel } from "@/lib/game/cards/details";
 import { getPlantPlayableBiomes } from "@/lib/game/cards/engineProfiles";
 import { useAuthUser } from "@/hooks/useAuthUser";
@@ -42,8 +40,6 @@ export default function GamePage({ params }: GamePageProps) {
   const { data: logEntries, loading: logLoading, error: logError } = useGameLog(gameId);
   const [error, setError] = useState<string | null>(null);
   const [setupKeptPlantIds, setSetupKeptPlantIds] = useState<string[]>([]);
-  const [upkeepResponseChoice, setUpkeepResponseChoice] = useState<"mitigate" | "amplify" | "none">("none");
-  const [upkeepResponseResource, setUpkeepResponseResource] = useState<"water">("water");
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [dismissedAnnouncementId, setDismissedAnnouncementId] = useState<string | null>(null);
   const loading = gameLoading || playersLoading || meLoading;
@@ -185,10 +181,7 @@ export default function GamePage({ params }: GamePageProps) {
   const remainingTurnActions = game.phase === "turns" ? Math.max(0, game.remainingActions ?? 0) : 0;
   const actionsExhausted = game.phase === "turns" && isMyTurn && remainingTurnActions <= 0;
 
-  const currentEvent = EVENT_CARDS.find((event) => event.id === game.currentEventId) ?? null;
-  const nextEventForecast = game.nextEventForecast ?? null;
   const isHost = Boolean(me?.id && me.id === game.hostPlayerId);
-  const myUpkeepResponse = me?.id ? game.upkeepEventResponses?.[me.id] : null;
 
   const biomeActivationAnnouncement = (game.biomeActivationAnnouncement as BiomeActivationAnnouncement | null | undefined) ?? null;
   const showBiomeActivationModal = Boolean(
@@ -211,13 +204,6 @@ export default function GamePage({ params }: GamePageProps) {
       </div>
 
       {error ? <p style={{ color: "crimson" }}>{error}</p> : null}
-
-      {nextEventForecast ? (
-        <p>
-          Forecast (next round): <strong>{nextEventForecast.tags.join(", ")}</strong> pressure on
-          <strong> {nextEventForecast.effectType}</strong> ({nextEventForecast.polarity}). Exact value remains hidden.
-        </p>
-      ) : null}
 
       {game.phase === "lobby" ? (
         <>
@@ -296,12 +282,7 @@ export default function GamePage({ params }: GamePageProps) {
 
       {game.phase === "turns" ? (
         <>
-          <p>Turns phase is in progress. Upkeep generates buds first; you can harvest buds now for points or hold them and convert to flowers with Force Bloom on your turn.</p>
-          {currentEvent ? (
-            <p>
-              Round event in play: <strong>{currentEvent.name}</strong> — {currentEvent.description} (resolves at round end)
-            </p>
-          ) : null}
+          <p>Turns phase is in progress.</p>
           <PlayerList players={players} activePlayerId={game.activePlayerId} />
           {currentPlayer ? (
             <HandPanel
@@ -323,7 +304,7 @@ export default function GamePage({ params }: GamePageProps) {
                   <p>Actions remaining: {remainingTurnActions}</p>
 
                   {actionsExhausted ? <p>No actions left. Your turn will advance automatically.</p> : null}
-                  {!actionsExhausted ? <p style={{ marginTop: 8 }}>Hover a card in your hand to plant it in an open biome slot. Available actions: Plant, Activate Desert (To the Sun), Activate Meadow (Pollinate), Activate Understory (Root), Well, Draw, Harvest, Force Bloom, Pass.</p> : null}
+                  {!actionsExhausted ? <p style={{ marginTop: 8 }}>Hover a card in your hand to plant it in an open biome slot. Available actions: Plant, Activate Desert (To the Sun), Activate Meadow (Pollinate), Activate Understory (Root), Well, Draw, Pass.</p> : null}
 
                   {!actionsExhausted && plantableBiomes.length === 0 ? <p>All biome rows are full. You cannot plant until a slot opens up.</p> : null}
 
@@ -390,12 +371,7 @@ export default function GamePage({ params }: GamePageProps) {
       
       {game.phase === "upkeep" ? (
         <>
-          <p>Upkeep phase: response window first, then host resolves upkeep + event.</p>
-          {currentEvent ? (
-            <p>
-              Event waiting to resolve: <strong>{currentEvent.name}</strong> — {currentEvent.description} [tags: {currentEvent.tags.join(", ")}]
-            </p>
-          ) : null}
+          <p>Upkeep phase: host resolves upkeep.</p>
           <PlayerList players={players} activePlayerId={game.activePlayerId} />
           <section>
             <h3>Player Gardens</h3>
@@ -408,46 +384,6 @@ export default function GamePage({ params }: GamePageProps) {
               ))}
             </div>
           </section>
-          {currentPlayer ? (
-            <section>
-              <h3>Pre-upkeep event response</h3>
-              {myUpkeepResponse ? (
-                <p>
-                  You already chose: <strong>{myUpkeepResponse.choice}</strong>
-                  {myUpkeepResponse.spentResource ? ` (spent 1 ${myUpkeepResponse.spentResource})` : ""}.
-                </p>
-              ) : (
-                <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-                  <label>
-                    Choice
-                    <select value={upkeepResponseChoice} onChange={(event) => setUpkeepResponseChoice(event.target.value as "mitigate" | "amplify" | "none")}>
-                      <option value="none">No response</option>
-                      <option value="mitigate">Mitigate event impact</option>
-                      <option value="amplify">Amplify event impact</option>
-                    </select>
-                  </label>
-                  <label>
-                    Resource
-                    <select value={upkeepResponseResource} onChange={(event) => setUpkeepResponseResource(event.target.value as "water")} disabled={upkeepResponseChoice === "none"}>
-                      <option value="water">Water</option>
-                    </select>
-                  </label>
-                  <button
-                    onClick={() =>
-                      runAction("upkeep-response", async () => {
-                        if (!user?.uid) throw new Error("Missing authenticated user id.");
-                        await submitUpkeepEventResponseTx(gameId, user.uid, upkeepResponseChoice, upkeepResponseResource);
-                      })
-                    }
-                    disabled={Boolean(busyAction)}
-                  >
-                    {busyAction === "upkeep-response" ? "Submitting..." : "Submit response"}
-                  </button>
-                </div>
-              )}
-            </section>
-          ) : null}
-
           {isHost ? (
             <button
               onClick={() =>
