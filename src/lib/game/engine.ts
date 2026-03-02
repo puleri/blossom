@@ -11,13 +11,6 @@ function clampResource(value: number) {
   return Math.max(0, value);
 }
 
-const HYDRATION_GROWTH_THRESHOLD = 2;
-const HYDRATION_BLOOM_THRESHOLD = 3;
-const DEFAULT_PLANT_WATER_CAPACITY = 3;
-const DEFAULT_PLANT_DECAY_PER_ROUND = 1;
-const DEFAULT_PLANT_REQUIRES_UPKEEP = true;
-
-
 const CARNIVOROUS_PLANT_IDS = new Set([
   "venus-flytrap",
   "pitcher-plant",
@@ -39,7 +32,7 @@ function normalizeGardenSlots(player: PlayerDoc): GardenSlot[] {
       return { state: slot as GardenSlotState, plantId: player.gardenPlantIds?.[index] ?? null, water: 0 };
     }
 
-    return { state: slot.state, plantId: slot.plantId ?? null, water: Math.max(0, slot.water ?? 0) };
+    return { state: slot.state, plantId: slot.plantId ?? null, water: 0 };
   });
 }
 
@@ -112,27 +105,10 @@ export function applyPlantDecayAndDeaths(player: PlayerDoc): PlayerDoc {
 
     const card = slot.plantId ? getPlantCardById(slot.plantId) : null;
     if (!card) {
-      return { ...slot, water: clampResource((slot.water ?? 0) - 1) };
-    }
-
-    const slotWater = slot.water ?? 0;
-    const hasRootRot = slotWater > DEFAULT_PLANT_WATER_CAPACITY;
-    const upkeepDrain = Math.max(1, DEFAULT_PLANT_DECAY_PER_ROUND);
-    const remainingWater = clampResource(Math.min(slotWater, DEFAULT_PLANT_WATER_CAPACITY) - upkeepDrain);
-
-    if (hasRootRot) {
       return { state: "withered", plantId: null, water: 0 };
     }
 
-    if (!DEFAULT_PLANT_REQUIRES_UPKEEP) {
-      return { ...slot, water: remainingWater };
-    }
-
-    if (slotWater === 0 || (slotWater < HYDRATION_GROWTH_THRESHOLD && DEFAULT_PLANT_DECAY_PER_ROUND >= 2)) {
-      return { state: "withered", plantId: null, water: 0 };
-    }
-
-    return { ...slot, water: remainingWater };
+    return { ...slot, water: 0 };
   });
 
   return { ...player, gardenSlots: nextSlots };
@@ -160,13 +136,12 @@ export function applyAdjacentPairBonuses(player: PlayerDoc): PlayerDoc {
 export function collectBudTokens(player: PlayerDoc): PlayerDoc {
   const slots = normalizeGardenSlots(player);
   const grownCount = slots.filter((slot) => slot.state === "grown").length;
-  const bloomBonus = slots.filter((slot) => slot.state === "grown" && (slot.water ?? 0) >= HYDRATION_BLOOM_THRESHOLD).length;
 
   return {
     ...player,
     resources: {
       ...player.resources,
-      buds: player.resources.buds + grownCount + bloomBonus
+      buds: player.resources.buds + grownCount
     }
   };
 }
