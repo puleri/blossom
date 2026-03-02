@@ -23,6 +23,18 @@ const BIOME_BUTTON_THEME: Record<BiomeName, { background: string; border: string
 export function HandPanel({ hand, canPlant = false, busyAction = null, availableBiomesByPlantId = {}, onPlantFromHand, children }: HandPanelProps) {
   const [activeCardId, setActiveCardId] = useState<string | null>(null);
 
+  function handlePlantClick(cardId: string, biome: BiomeName) {
+    console.log("[plant-flow] HandPanel plant button clicked", {
+      cardId,
+      biome,
+      canPlant,
+      busyAction,
+      availableBiomes: availableBiomesByPlantId[cardId] ?? []
+    });
+
+    onPlantFromHand?.(cardId, biome);
+  }
+
   return (
     <section>
       <h2>Hand</h2>
@@ -100,7 +112,7 @@ export function HandPanel({ hand, canPlant = false, busyAction = null, available
                             <button
                               key={`${cardId}-${biome}`}
                               type="button"
-                              onClick={() => onPlantFromHand(cardId, biome)}
+                              onClick={() => handlePlantClick(cardId, biome)}
                               disabled={Boolean(busyAction)}
                               style={{
                                 backgroundColor: theme.background,

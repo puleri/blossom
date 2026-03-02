@@ -118,14 +118,30 @@ export default function GamePage({ params }: GamePageProps) {
   }
 
   async function runAction(actionName: string, action: () => Promise<void>) {
+    console.log("[plant-flow] runAction start", {
+      gameId,
+      actionName,
+      meId: me?.id ?? null,
+      uid: user?.uid ?? null,
+      busyAction
+    });
     setError(null);
     setBusyAction(actionName);
 
     try {
       await action();
+      console.log("[plant-flow] runAction success", { gameId, actionName, meId: me?.id ?? null, uid: user?.uid ?? null });
     } catch (actionError) {
+      console.error("[plant-flow] runAction failure", {
+        gameId,
+        actionName,
+        meId: me?.id ?? null,
+        uid: user?.uid ?? null,
+        error: actionError
+      });
       setError(actionError instanceof Error ? actionError.message : "Action failed.");
     } finally {
+      console.log("[plant-flow] runAction end", { gameId, actionName });
       setBusyAction(null);
     }
   }
@@ -303,9 +319,22 @@ export default function GamePage({ params }: GamePageProps) {
               availableBiomesByPlantId={availableBiomesByPlantId}
               onPlantFromHand={(plantId, biome) =>
                 runAction("sow", async () => {
+                  console.log("[plant-flow] onPlantFromHand invoked", {
+                    gameId,
+                    meId: me?.id ?? null,
+                    uid: user?.uid ?? null,
+                    plantId,
+                    biome,
+                    inCurrentHand: Boolean(currentPlayer?.hand.includes(plantId)),
+                    availableBiomesForPlant: availableBiomesByPlantId[plantId] ?? []
+                  });
+
                   if (!user?.uid) throw new Error("Missing authenticated user id.");
                   if (!getPlantCardById(plantId)) throw new Error("Select a plant to plant.");
+
+                  console.log("[plant-flow] calling sowPlantTx", { gameId, uid: user.uid, plantId, biome });
                   await sowPlantTx(gameId, user.uid, plantId, biome);
+                  console.log("[plant-flow] sowPlantTx resolved", { gameId, uid: user.uid, plantId, biome });
                 })
               }
             >
