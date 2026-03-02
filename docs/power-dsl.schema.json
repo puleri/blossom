@@ -1,0 +1,278 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.com/plantgame/power-dsl.schema.json",
+  "title": "Plant Game Power DSL (Minimal)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "trigger", "steps"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Unique power id (stable)."
+    },
+    "trigger": {
+      "$ref": "#/$defs/Trigger"
+    },
+    "oncePer": {
+      "type": "string",
+      "enum": ["turn", "activation", "round", "game"],
+      "description": "Optional frequency limiter."
+    },
+    "steps": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/Step" }
+    }
+  },
+  "$defs": {
+    "Trigger": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind"],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": ["onActivate", "onPlay", "onMature"]
+        },
+        "row": {
+          "type": "string",
+          "enum": ["root", "pollinate", "toTheSun"],
+          "description": "Required when kind = onActivate."
+        }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "kind": { "const": "onActivate" } }, "required": ["kind"] },
+          "then": { "required": ["row"] },
+          "else": { "not": { "required": ["row"] } }
+        }
+      ]
+    },
+
+    "Step": {
+      "oneOf": [
+        { "$ref": "#/$defs/IfStep" },
+        { "$ref": "#/$defs/ChoiceStep" },
+        { "$ref": "#/$defs/GainResourceStep" },
+        { "$ref": "#/$defs/SpendResourceStep" },
+        { "$ref": "#/$defs/GainSunlightStep" },
+        { "$ref": "#/$defs/DrawCardsStep" },
+        { "$ref": "#/$defs/TuckCardStep" },
+        { "$ref": "#/$defs/ScorePointsStep" }
+      ]
+    },
+
+    "IfStep": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["op", "cond", "then"],
+      "properties": {
+        "op": { "const": "if" },
+        "cond": { "$ref": "#/$defs/Condition" },
+        "then": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/Step" }
+        },
+        "else": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/Step" }
+        }
+      }
+    },
+
+    "ChoiceStep": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["op", "options"],
+      "properties": {
+        "op": { "const": "choice" },
+        "options": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 6,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["label", "steps"],
+            "properties": {
+              "label": { "type": "string" },
+              "steps": {
+                "type": "array",
+                "minItems": 1,
+                "items": { "$ref": "#/$defs/Step" }
+              }
+            }
+          }
+        }
+      }
+    },
+
+    "GainResourceStep": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["op", "resource", "amount", "to"],
+      "properties": {
+        "op": { "const": "gainResource" },
+        "resource": { "$ref": "#/$defs/RootResource" },
+        "amount": { "$ref": "#/$defs/PositiveInt" },
+        "to": { "$ref": "#/$defs/PlayerRef" }
+      }
+    },
+
+    "SpendResourceStep": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["op", "resource", "amount", "from"],
+      "properties": {
+        "op": { "const": "spendResource" },
+        "resource": { "$ref": "#/$defs/RootResource" },
+        "amount": { "$ref": "#/$defs/PositiveInt" },
+        "from": { "$ref": "#/$defs/PlayerRef" }
+      }
+    },
+
+    "GainSunlightStep": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["op", "amount", "toPlant"],
+      "properties": {
+        "op": { "const": "gainSunlight" },
+        "amount": { "$ref": "#/$defs/PositiveInt" },
+        "toPlant": { "$ref": "#/$defs/PlantTarget" },
+        "clampToCapacity": {
+          "type": "boolean",
+          "default": true,
+          "description": "If true, do not exceed sunlightCapacity."
+        }
+      }
+    },
+
+    "DrawCardsStep": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["op", "amount", "to", "source"],
+      "properties": {
+        "op": { "const": "drawCards" },
+        "amount": { "$ref": "#/$defs/PositiveInt" },
+        "to": { "$ref": "#/$defs/PlayerRef" },
+        "source": {
+          "type": "string",
+          "enum": ["deck", "tray", "deckOrTrayChoice"]
+        }
+      }
+    },
+
+    "TuckCardStep": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["op", "amount", "from", "underPlant"],
+      "properties": {
+        "op": { "const": "tuckCard" },
+        "amount": { "$ref": "#/$defs/PositiveInt" },
+        "from": {
+          "type": "string",
+          "enum": ["hand", "tray"],
+          "description": "Where the tucked card comes from."
+        },
+        "underPlant": { "$ref": "#/$defs/PlantTarget" }
+      }
+    },
+
+    "ScorePointsStep": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["op", "amount", "to"],
+      "properties": {
+        "op": { "const": "scorePoints" },
+        "amount": { "$ref": "#/$defs/PositiveInt" },
+        "to": { "$ref": "#/$defs/PlayerRef" }
+      }
+    },
+
+    "Condition": {
+      "oneOf": [
+        { "$ref": "#/$defs/HasSunlightCondition" },
+        { "$ref": "#/$defs/CountCondition" }
+      ]
+    },
+
+    "HasSunlightCondition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["op", "plant", "atLeast"],
+      "properties": {
+        "op": { "const": "hasSunlight" },
+        "plant": { "$ref": "#/$defs/PlantTarget" },
+        "atLeast": { "$ref": "#/$defs/NonNegativeInt" }
+      }
+    },
+
+    "CountCondition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["op", "scope", "predicate", "cmp", "value"],
+      "properties": {
+        "op": { "const": "count" },
+        "scope": {
+          "type": "string",
+          "enum": ["playerTableau", "row", "allPlayers"]
+        },
+        "predicate": { "$ref": "#/$defs/PlantPredicate" },
+        "cmp": {
+          "type": "string",
+          "enum": [">=", ">", "==", "<=", "<"]
+        },
+        "value": { "$ref": "#/$defs/NonNegativeInt" }
+      }
+    },
+
+    "PlantPredicate": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "biome": { "$ref": "#/$defs/Biome" },
+        "tag": { "type": "string" },
+        "mature": { "type": "boolean" }
+      }
+    },
+
+    "PlantTarget": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ref"],
+      "properties": {
+        "ref": {
+          "type": "string",
+          "enum": ["self"],
+          "description": "Minimal targeting: only 'self'. Extend later with selectors."
+        }
+      }
+    },
+
+    "PlayerRef": {
+      "type": "string",
+      "enum": ["self"],
+      "description": "Minimal: only self. Extend later for opponents/all."
+    },
+
+    "RootResource": {
+      "type": "string",
+      "enum": ["water", "nutrients", "seeds", "compost"]
+    },
+
+    "Biome": {
+      "type": "string",
+      "enum": ["desert", "meadow", "understory", "canopy"]
+    },
+
+    "PositiveInt": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "NonNegativeInt": {
+      "type": "integer",
+      "minimum": 0
+    }
+  }
+}
