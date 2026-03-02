@@ -47,6 +47,7 @@ export async function createGame(hostDisplayName: string, uid?: string | null) {
     playerOrder: [],
     turnIndex: 0,
     remainingActions: ACTIONS_PER_TURN,
+    availableActions: ["grow", "root", "toTheSun", "pollinate"],
     eventDeck: shuffleFisherYates(EVENT_CARDS),
     plantDeck: [],
     currentEventId: null,

@@ -13,6 +13,7 @@ export interface GardenSlot {
 }
 
 export type ResourceKey = "water" | "seeds" | "buds" | "flowers" | "bugs";
+export type TurnActionChoice = "grow" | "root" | "toTheSun" | "pollinate";
 
 export interface PlayerResources {
   water: number;
@@ -91,7 +92,8 @@ export interface GameDoc {
   activePlayerId: string | null;
   playerOrder: string[];
   turnIndex: number;
-  remainingActions: number;
+  remainingActions?: number;
+  availableActions?: TurnActionChoice[];
   eventDeck: EventCard[];
   plantDeck: string[];
   lastPhaseResolvedRound: number | null;

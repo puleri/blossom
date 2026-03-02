@@ -31,8 +31,11 @@ import type {
   GameLogEntryDoc,
   GardenSlot,
   GardenSlotState,
-  PlayerDoc
+  PlayerDoc,
+  TurnActionChoice
 } from "@/lib/game/types";
+
+const TURN_ACTION_CHOICES: TurnActionChoice[] = ["grow", "root", "toTheSun", "pollinate"];
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message);
@@ -80,12 +83,14 @@ function getBiomeLevel(gardenSlots: GardenSlot[], biome: BiomeName) {
 }
 
 
-function getRemainingActions(game: Omit<GameDoc, "id">) {
-  return game.remainingActions ?? ACTIONS_PER_TURN;
+function requireActionChoice(game: Omit<GameDoc, "id">, action: TurnActionChoice) {
+  const availableActions = game.availableActions ?? TURN_ACTION_CHOICES;
+  assert(availableActions.includes(action), `${action} is not currently available.`);
 }
 
-function requireActionsRemaining(game: Omit<GameDoc, "id">) {
-  assert(getRemainingActions(game) > 0, "No actions remaining. End your turn.");
+
+function requireActionsRemaining(_game: Omit<GameDoc, "id">) {
+  return;
 }
 
 function consumeTurnAction(
@@ -96,21 +101,15 @@ function consumeTurnAction(
   playerId: string,
   displayName: string
 ) {
-  const remainingActions = getRemainingActions(game) - 1;
-  if (remainingActions <= 0) {
-    const nextTurn = resolveNextTurnState(game, players, playerId);
-    transaction.update(gameDocRef(gameId), nextTurn.nextState);
-    appendLog(transaction, gameId, {
-      message: nextTurn.wrapped
-        ? `Round ${game.round} turns complete. Entering upkeep.`
-        : `${displayName} exhausted their actions. Turn auto-ended.`,
-      playerId,
-      type: "action"
-    });
-    return;
-  }
-
-  transaction.update(gameDocRef(gameId), { remainingActions });
+  const nextTurn = resolveNextTurnState(game, players, playerId);
+  transaction.update(gameDocRef(gameId), nextTurn.nextState);
+  appendLog(transaction, gameId, {
+    message: nextTurn.wrapped
+      ? `Round ${game.round} turns complete. Entering upkeep.`
+      : `${displayName} completed an action. Turn advanced.`,
+    playerId,
+    type: "action"
+  });
 }
 
 function resolveNextTurnState(game: Omit<GameDoc, "id">, players: QueryDocumentSnapshot<Omit<PlayerDoc, "id">>[], currentPlayerId: string) {
@@ -124,9 +123,125 @@ function resolveNextTurnState(game: Omit<GameDoc, "id">, players: QueryDocumentS
   return {
     wrapped,
     nextState: wrapped
-      ? { phase: "upkeep" as const, activePlayerId: null, turnIndex: 0, remainingActions: ACTIONS_PER_TURN, upkeepEventResponses: {} }
-      : { activePlayerId: order[nextIndex], turnIndex: nextIndex, remainingActions: ACTIONS_PER_TURN }
+      ? { phase: "upkeep" as const, activePlayerId: null, turnIndex: 0, remainingActions: ACTIONS_PER_TURN, availableActions: TURN_ACTION_CHOICES, upkeepEventResponses: {} }
+      : { activePlayerId: order[nextIndex], turnIndex: nextIndex, remainingActions: ACTIONS_PER_TURN, availableActions: TURN_ACTION_CHOICES }
   };
+}
+
+function getSlotsForAction(action: TurnActionChoice) {
+  if (action === "grow") {
+    return [3, 2, 1, 0];
+  }
+  if (action === "root") {
+    return [...getBiomeSlots("rainforest")].sort((a, b) => b - a);
+  }
+  if (action === "toTheSun") {
+    return [...getBiomeSlots("desert")].sort((a, b) => b - a);
+  }
+  return [...getBiomeSlots("plains")].sort((a, b) => b - a);
+}
+
+function getActionLevel(gardenSlots: GardenSlot[], action: TurnActionChoice) {
+  if (action === "grow") {
+    return gardenSlots.filter((slot) => slot.state !== "empty" && slot.state !== "withered" && Boolean(slot.plantId)).length;
+  }
+
+  if (action === "root") {
+    return getBiomeLevel(gardenSlots, "rainforest");
+  }
+
+  if (action === "toTheSun") {
+    return getBiomeLevel(gardenSlots, "desert");
+  }
+
+  return getBiomeLevel(gardenSlots, "plains");
+}
+
+function applyBaseRowReward(resources: PlayerDoc["resources"], action: TurnActionChoice, level: number) {
+  if (action === "grow") return { ...resources, seeds: resources.seeds + level };
+  if (action === "root") return { ...resources, water: resources.water + level };
+  if (action === "toTheSun") return { ...resources, buds: resources.buds + level };
+  return { ...resources, flowers: resources.flowers + level };
+}
+
+async function takeRowActionTx(gameId: string, uid: string, action: TurnActionChoice) {
+  const players = await getOrderedPlayers(gameId);
+
+  return runTransaction(firestore, async (transaction) => {
+    const gameSnap = await transaction.get(gameDocRef(gameId));
+    assert(gameSnap.exists(), "Game not found.");
+    const gameData = gameSnap.data();
+    requireTurnPhase(gameData);
+
+    const playerSnap = getPlayerByUid(players, uid);
+    assert(gameData.activePlayerId === playerSnap.id, "Only the active player can perform turn actions.");
+    requireActionChoice(gameData, action);
+
+    const playerData = playerSnap.data();
+    let resolvedPlayer: PlayerDoc = { id: playerSnap.id, ...playerData };
+    const initialSlots = normalizeGardenSlots(playerData);
+    const level = getActionLevel(initialSlots, action);
+    assert(level > 0, `No plants are available to resolve ${action}.`);
+
+    resolvedPlayer.resources = applyBaseRowReward(resolvedPlayer.resources, action, level);
+    const activationLogs: string[] = [];
+    for (const slotIndex of getSlotsForAction(action)) {
+      const slot = normalizeGardenSlots(resolvedPlayer)[slotIndex];
+      if (!slot || slot.state === "empty" || slot.state === "withered" || !slot.plantId) continue;
+      const resolved = activatePlantAbilityForTurn(resolvedPlayer, slotIndex, gameData.round);
+      resolvedPlayer = resolved.player;
+      if (resolved.logs.length === 0) {
+        activationLogs.push(`slot ${slotIndex + 1}: no activatable ability.`);
+      } else {
+        resolved.logs.forEach((entry) => activationLogs.push(`slot ${entry.slotIndex + 1}: ${entry.message}`));
+      }
+    }
+
+    transaction.update(playerDocRef(gameId, playerSnap.id), {
+      resources: resolvedPlayer.resources,
+      abilityUsage: resolvedPlayer.abilityUsage ?? {},
+      gardenSlots: normalizeGardenSlots(resolvedPlayer)
+    });
+
+    const nextTurn = resolveNextTurnState(gameData, players, playerSnap.id);
+    transaction.update(gameDocRef(gameId), nextTurn.nextState);
+
+    appendLog(transaction, gameId, {
+      message: `${playerData.displayName} took ${action} at level ${level} and ended their turn.`,
+      playerId: playerSnap.id,
+      type: "action"
+    });
+    activationLogs.forEach((message) => {
+      appendLog(transaction, gameId, {
+        message: `${playerData.displayName} ${action} ${message}`,
+        playerId: playerSnap.id,
+        type: "action"
+      });
+    });
+    appendLog(transaction, gameId, {
+      message: nextTurn.wrapped
+        ? `Round ${gameData.round} turns complete. Entering upkeep.`
+        : `${playerData.displayName} completed ${action}. Turn advanced.`,
+      playerId: playerSnap.id,
+      type: "action"
+    });
+  });
+}
+
+export async function takeGrowActionTx(gameId: string, uid: string) {
+  return takeRowActionTx(gameId, uid, "grow");
+}
+
+export async function takeRootActionTx(gameId: string, uid: string) {
+  return takeRowActionTx(gameId, uid, "root");
+}
+
+export async function takeToTheSunActionTx(gameId: string, uid: string) {
+  return takeRowActionTx(gameId, uid, "toTheSun");
+}
+
+export async function takePollinateActionTx(gameId: string, uid: string) {
+  return takeRowActionTx(gameId, uid, "pollinate");
 }
 
 export async function createGameTx(hostDisplayName: string, uid: string) {
@@ -147,6 +262,7 @@ export async function createGameTx(hostDisplayName: string, uid: string) {
       playerOrder: [],
       turnIndex: 0,
       remainingActions: ACTIONS_PER_TURN,
+      availableActions: TURN_ACTION_CHOICES,
       eventDeck: [],
       plantDeck: [],
       currentEventId: null,
@@ -240,6 +356,7 @@ export async function startGameSetupTx(gameId: string, uid: string) {
       playerOrder: orderedPlayerIds,
       turnIndex: 0,
       remainingActions: ACTIONS_PER_TURN,
+      availableActions: TURN_ACTION_CHOICES,
       plantDeck: remainingDeck,
       currentEventId: null,
       nextEventForecast: null,
@@ -301,6 +418,7 @@ export async function submitSetupKeepTx(
         activePlayerId,
         turnIndex: 0,
         remainingActions: ACTIONS_PER_TURN,
+        availableActions: TURN_ACTION_CHOICES,
         eventDeck: [],
         currentEventId: null,
         nextEventForecast: null,
@@ -585,23 +703,8 @@ export async function drawPlantCardTx(gameId: string, uid: string) {
       hand: [...playerData.hand, drawnCardId]
     });
 
-    const remainingActions = getRemainingActions(gameData) - 1;
-    if (remainingActions <= 0) {
-      const nextTurn = resolveNextTurnState(gameData, players, playerSnap.id);
-      transaction.update(gameRef, { ...nextTurn.nextState, plantDeck: draw.remainingDeck });
-      appendLog(transaction, gameId, {
-        message: nextTurn.wrapped
-          ? `Round ${gameData.round} turns complete. Entering upkeep.`
-          : `${playerData.displayName} exhausted their actions. Turn auto-ended.`,
-        playerId: playerSnap.id,
-        type: "action"
-      });
-    } else {
-      transaction.update(gameRef, {
-        plantDeck: draw.remainingDeck,
-        remainingActions
-      });
-    }
+    transaction.update(gameRef, { plantDeck: draw.remainingDeck });
+    consumeTurnAction(transaction, gameId, gameData, players, playerSnap.id, playerData.displayName);
 
     appendLog(transaction, gameId, {
       message: `${playerData.displayName} drew a plant card (${getPlantDisplayName(drawnCardId)}).`,
@@ -777,6 +880,7 @@ export async function resolveRoundUpkeepTx(gameId: string, uid: string) {
       activePlayerId: isGameOver ? null : gameData.playerOrder[0] ?? players[0]?.id ?? null,
       turnIndex: 0,
       remainingActions: ACTIONS_PER_TURN,
+      availableActions: TURN_ACTION_CHOICES,
       round: isGameOver ? gameData.round : nextRound,
       upkeepEventResponses: {},
       lastPhaseResolvedRound: gameData.round
