@@ -47,10 +47,10 @@ export const GAME_TEST_DATA: GameTestData = {
       score: 5,
       hand: ["sunbloom", "rainfern", "petalburst"],
       gardenSlots: [
-        { state: "grown", plantId: "sunbloom" },
-        { state: "grown", plantId: "rainfern" },
-        { state: "empty", plantId: null },
-        { state: "empty", plantId: null }
+        { state: "grown", plantId: "sunbloom", sunlight: 2, sunlightCapacity: 3 },
+        { state: "grown", plantId: "rainfern", sunlight: 1, sunlightCapacity: 2 },
+        { state: "empty", plantId: null, sunlight: 0, sunlightCapacity: 0 },
+        { state: "empty", plantId: null, sunlight: 0, sunlightCapacity: 0 }
       ],
       keptFromMulligan: true
     },
@@ -69,10 +69,10 @@ export const GAME_TEST_DATA: GameTestData = {
       score: 3,
       hand: ["thornivy", "moonpetal"],
       gardenSlots: [
-        { state: "grown", plantId: "thornivy" },
-        { state: "withered", plantId: null },
-        { state: "empty", plantId: null },
-        { state: "grown", plantId: "moonpetal" }
+        { state: "grown", plantId: "thornivy", sunlight: 2, sunlightCapacity: 2 },
+        { state: "withered", plantId: null, sunlight: 0, sunlightCapacity: 0 },
+        { state: "empty", plantId: null, sunlight: 0, sunlightCapacity: 0 },
+        { state: "grown", plantId: "moonpetal", sunlight: 1, sunlightCapacity: 3 }
       ],
       keptFromMulligan: true
     }
