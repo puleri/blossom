@@ -5,6 +5,13 @@ interface PlayerListProps {
   activePlayerId: string | null;
 }
 
+function formatScoreBreakdown(player: PlayerDoc) {
+  const breakdown = player.scoreBreakdown;
+  if (!breakdown) return `Score: ${player.score}`;
+
+  return `Score: ${breakdown.total} (Plants ${breakdown.plantPoints}, Tucked ${breakdown.tuckedPoints}, Sunlight ${breakdown.sunlightPoints}, Bonus ${breakdown.bonusPoints})`;
+}
+
 export function PlayerList({ players, activePlayerId }: PlayerListProps) {
   return (
     <section>
@@ -14,7 +21,7 @@ export function PlayerList({ players, activePlayerId }: PlayerListProps) {
           <li key={player.id}>
             {player.displayName}
             {player.isHost ? " (Host)" : ""}
-            {player.id === activePlayerId ? " • Active" : ""} — Score: {player.score}, Water: {player.resources.water}, Hand: {player.hand.length} cards
+            {player.id === activePlayerId ? " • Active" : ""} — {formatScoreBreakdown(player)}, Water: {player.resources.water}, Hand: {player.hand.length} cards
           </li>
         ))}
       </ul>

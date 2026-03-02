@@ -78,7 +78,16 @@ export interface PlayerDoc {
   gardenSlots: GardenSlot[];
   gardenPlantIds?: Array<string | null>;
   abilityUsage?: Record<string, number>;
+  scoreBreakdown?: ScoreBreakdown;
   keptFromMulligan: boolean;
+}
+
+export interface ScoreBreakdown {
+  plantPoints: number;
+  tuckedPoints: number;
+  sunlightPoints: number;
+  bonusPoints: number;
+  total: number;
 }
 
 export interface GameDoc {

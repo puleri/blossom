@@ -18,7 +18,7 @@ import {
   applyAdjacentPairBonuses,
   applyPlantDecayAndDeaths,
   applyResourcePressureCaps,
-  computePlayerScore,
+  computePlayerScoreBreakdown,
   resolveRoundEndUpkeepStartAbilities
 } from "@/lib/game/engine";
 import { CARD_POWERS } from "@/lib/game/powers/cardPowers";
@@ -935,10 +935,13 @@ export async function resolveRoundUpkeepTx(gameId: string, uid: string) {
     const isGameOver = nextRound > gameData.roundsTotal;
 
     updatedPlayers.forEach((player) => {
+      const scoreBreakdown = isGameOver ? computePlayerScoreBreakdown(player) : player.scoreBreakdown ?? null;
+
       transaction.update(playerDocRef(gameId, player.id), {
         gardenSlots: player.gardenSlots,
         resources: player.resources,
-        score: isGameOver ? computePlayerScore(player) : player.score,
+        score: isGameOver ? scoreBreakdown.total : player.score,
+        scoreBreakdown,
         abilityUsage: player.abilityUsage ?? {}
       });
     });

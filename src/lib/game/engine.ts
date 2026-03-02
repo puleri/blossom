@@ -5,7 +5,7 @@ import {
   resolveRoundEndAbilityWindow,
   type AbilityTriggerLog
 } from "@/lib/game/abilityResolver";
-import type { EventCard, GardenSlot, GardenSlotState, PlayerDoc } from "@/lib/game/types";
+import type { EventCard, GardenSlot, GardenSlotState, PlayerDoc, ScoreBreakdown } from "@/lib/game/types";
 
 function clampResource(value: number) {
   return Math.max(0, value);
@@ -39,6 +39,18 @@ function computeTableauPlantPoints(player: PlayerDoc) {
     const card = slot.plantId ? getPlantCardById(slot.plantId) : null;
     return total + (card?.points ?? 0);
   }, 0);
+}
+
+function computeStoredSunlightPoints(player: PlayerDoc) {
+  return normalizeGardenSlots(player).reduce((total, slot) => {
+    if (slot.state !== "grown") return total;
+    return total + Math.max(0, slot.sunlight ?? 0);
+  }, 0);
+}
+
+function computeTuckedPoints(_player: PlayerDoc) {
+  // Tucked cards are not yet persisted in player docs; keep the Wingspan-analog category explicit.
+  return 0;
 }
 
 export function applyEventToPlayers(players: PlayerDoc[], event: EventCard): PlayerDoc[] {
@@ -114,7 +126,21 @@ export function applyResourcePressureCaps(player: PlayerDoc): PlayerDoc {
   return player;
 }
 
-// Scoring is now strictly tableau-based (plus tracked score adjustments from events/actions).
+export function computePlayerScoreBreakdown(player: PlayerDoc): ScoreBreakdown {
+  const plantPoints = computeTableauPlantPoints(player);
+  const tuckedPoints = computeTuckedPoints(player);
+  const sunlightPoints = computeStoredSunlightPoints(player);
+  const bonusPoints = player.score;
+
+  return {
+    plantPoints,
+    tuckedPoints,
+    sunlightPoints,
+    bonusPoints,
+    total: plantPoints + tuckedPoints + sunlightPoints + bonusPoints
+  };
+}
+
 export function computePlayerScore(player: PlayerDoc): number {
-  return player.score + computeTableauPlantPoints(player);
+  return computePlayerScoreBreakdown(player).total;
 }
