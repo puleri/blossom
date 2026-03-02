@@ -11,28 +11,23 @@ function clampResource(value: number) {
   return Math.max(0, value);
 }
 
-const CARNIVOROUS_PLANT_IDS = new Set([
-  "venus-flytrap",
-  "pitcher-plant",
-  "sundew-cluster",
-  "cobra-lily",
-  "bladderwort",
-  "thornmaw-bramble",
-  "sporefang-vine",
-  "gloomtrap-shrub",
-  "mawroot-bulb",
-  "carrion-bloom",
-  "razorleaf-net",
-  "apex-devourer"
-]);
-
 function normalizeGardenSlots(player: PlayerDoc): GardenSlot[] {
   return player.gardenSlots.map((slot, index) => {
     if (typeof slot === "string") {
-      return { state: slot as GardenSlotState, plantId: player.gardenPlantIds?.[index] ?? null, water: 0 };
+      return {
+        state: slot as GardenSlotState,
+        plantId: player.gardenPlantIds?.[index] ?? null,
+        sunlight: 0,
+        sunlightCapacity: 0
+      };
     }
 
-    return { state: slot.state, plantId: slot.plantId ?? null, water: 0 };
+    return {
+      state: slot.state,
+      plantId: slot.plantId ?? null,
+      sunlight: slot.sunlight ?? 0,
+      sunlightCapacity: slot.sunlightCapacity ?? 0
+    };
   });
 }
 
@@ -40,10 +35,7 @@ function computeTableauPlantPoints(player: PlayerDoc) {
   const slots = normalizeGardenSlots(player);
 
   return slots.reduce((total, slot) => {
-    if (slot.state !== "grown") {
-      return total;
-    }
-
+    if (slot.state !== "grown") return total;
     const card = slot.plantId ? getPlantCardById(slot.plantId) : null;
     return total + (card?.points ?? 0);
   }, 0);
@@ -53,6 +45,11 @@ export function applyEventToPlayers(players: PlayerDoc[], event: EventCard): Pla
   return players.map((player) => {
     if (event.effectType === "points") {
       return { ...player, score: clampResource(player.score + event.value) };
+    }
+
+    // Root resources are player-level. Sunlight is per-plant and ignored at this layer.
+    if (event.effectType === "sunlight") {
+      return player;
     }
 
     const nextResources = {
@@ -67,10 +64,7 @@ export function applyEventToPlayers(players: PlayerDoc[], event: EventCard): Pla
 export function resolveRoundEndUpkeepStartAbilities(players: PlayerDoc[]) {
   return players.map((player) => {
     const resolved = resolveRoundEndAbilityWindow(player);
-    return {
-      player: resolved.player,
-      logs: resolved.logs
-    };
+    return { player: resolved.player, logs: resolved.logs };
   });
 }
 
@@ -79,13 +73,9 @@ export function applyEventToPlayersWithReactions(players: PlayerDoc[], event: Ev
 
   const updatedPlayers = players.map((player) => {
     const reaction = resolveEventReactionWindow(player, event);
-    reaction.logs.forEach((trigger) => {
-      logs.push({ playerId: player.id, trigger });
-    });
+    reaction.logs.forEach((trigger) => logs.push({ playerId: player.id, trigger }));
 
-    if (reaction.eventBlocked && event.tags.includes("pest")) {
-      return reaction.player;
-    }
+    if (reaction.eventBlocked && event.tags.includes("pest")) return reaction.player;
 
     return applyEventToPlayers([reaction.player], event)[0];
   });
@@ -100,103 +90,31 @@ export function activatePlantAbilityForTurn(player: PlayerDoc, slotIndex: number
 export function applyPlantDecayAndDeaths(player: PlayerDoc): PlayerDoc {
   const nextSlots = normalizeGardenSlots(player).map<GardenSlot>((slot) => {
     if (slot.state === "empty" || slot.state === "withered") {
-      return { state: slot.state, plantId: null, water: 0 };
+      return { state: slot.state, plantId: null, sunlight: 0, sunlightCapacity: 0 };
     }
 
     const card = slot.plantId ? getPlantCardById(slot.plantId) : null;
     if (!card) {
-      return { state: "withered", plantId: null, water: 0 };
+      return { state: "withered", plantId: null, sunlight: 0, sunlightCapacity: 0 };
     }
 
-    return { ...slot, water: 0 };
+    return { ...slot, sunlight: 0 };
   });
 
   return { ...player, gardenSlots: nextSlots };
 }
 
+// Legacy upkeep hook retained for call sites; no longer grants bud/flower/bug-related bonuses.
 export function applyAdjacentPairBonuses(player: PlayerDoc): PlayerDoc {
-  const slots = normalizeGardenSlots(player);
-  let adjacentGrownPairs = 0;
-
-  for (let i = 0; i < slots.length - 1; i += 1) {
-    if (slots[i].state === "grown" && slots[i + 1].state === "grown") {
-      adjacentGrownPairs += 1;
-    }
-  }
-
-  return {
-    ...player,
-    resources: {
-      ...player.resources,
-      buds: player.resources.buds + adjacentGrownPairs
-    }
-  };
+  return player;
 }
 
-export function collectBudTokens(player: PlayerDoc): PlayerDoc {
-  const slots = normalizeGardenSlots(player);
-  const grownCount = slots.filter((slot) => slot.state === "grown").length;
-
-  return {
-    ...player,
-    resources: {
-      ...player.resources,
-      buds: player.resources.buds + grownCount
-    }
-  };
-}
-
+// Legacy upkeep hook retained for call sites; pressure caps are not part of the current plan.
 export function applyResourcePressureCaps(player: PlayerDoc): PlayerDoc {
-  const waterSoftCap = 6;
-  const waterDecay = player.resources.water > waterSoftCap ? 1 : 0;
-
-  return {
-    ...player,
-    resources: {
-      ...player.resources,
-      water: clampResource(player.resources.water - waterDecay)
-    }
-  };
+  return player;
 }
 
-
-export function harvestBudsForPoints(player: PlayerDoc): PlayerDoc {
-  const pointsGained = Math.floor(player.resources.buds / 2);
-
-  return {
-    ...player,
-    score: player.score + pointsGained,
-    resources: {
-      ...player.resources,
-      buds: 0
-    }
-  };
-}
-
-export function forceBloom(player: PlayerDoc): PlayerDoc {
-  return {
-    ...player,
-    resources: {
-      ...player.resources,
-      flowers: player.resources.flowers + player.resources.buds,
-      buds: 0
-    }
-  };
-}
-
+// Scoring is now strictly tableau-based (plus tracked score adjustments from events/actions).
 export function computePlayerScore(player: PlayerDoc): number {
-  const tableauPlantPoints = computeTableauPlantPoints(player);
-  const bugPenalty = Math.min(player.resources.bugs, 6);
-  const slots = normalizeGardenSlots(player);
-  const carnivorousCount = slots.reduce((count, slot) => {
-    if (slot.state !== "grown" || !slot.plantId) {
-      return count;
-    }
-
-    return count + (CARNIVOROUS_PLANT_IDS.has(slot.plantId) ? 1 : 0);
-  }, 0);
-  const hasApexDevourer = slots.some((slot) => slot.state === "grown" && slot.plantId === "apex-devourer");
-  const apexBonus = hasApexDevourer ? player.resources.bugs + carnivorousCount * 2 : 0;
-
-  return tableauPlantPoints + player.resources.flowers - bugPenalty + apexBonus;
+  return player.score + computeTableauPlantPoints(player);
 }
