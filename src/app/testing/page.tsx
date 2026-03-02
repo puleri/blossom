@@ -121,7 +121,11 @@ export default function TestingPage() {
         const next = [...previous];
         const updated = { ...next[meIndex] };
         const nextSlots = [...updated.gardenSlots];
-        nextSlots[selectedSlot] = { state: "grown", plantId: plant.id };
+        nextSlots[selectedSlot] = {
+          ...nextSlots[selectedSlot],
+          state: "grown",
+          plantId: plant.id
+        };
         updated.gardenSlots = nextSlots;
         updated.hand = updated.hand.filter((cardId) => cardId !== selectedPlantId);
         next[meIndex] = updated;

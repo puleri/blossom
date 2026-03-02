@@ -66,10 +66,10 @@ async function getOrderedPlayers(gameId: string) {
 function normalizeGardenSlots(player: Omit<PlayerDoc, "id">): GardenSlot[] {
   return player.gardenSlots.map((slot, index) => {
     if (typeof slot === "string") {
-      return { state: slot as GardenSlotState, plantId: player.gardenPlantIds?.[index] ?? null, water: 0 };
+      return { state: slot as GardenSlotState, plantId: player.gardenPlantIds?.[index] ?? null, sunlight: 0, sunlightCapacity: 0 };
     }
 
-    return { state: slot.state, plantId: slot.plantId ?? null, water: Math.max(0, slot.water ?? 0) };
+    return { state: slot.state, plantId: slot.plantId ?? null, sunlight: Math.max(0, slot.sunlight ?? 0), sunlightCapacity: Math.max(0, slot.sunlightCapacity ?? 0) };
   });
 }
 
@@ -137,7 +137,7 @@ function activatePlantForRow(player: PlayerDoc, slotIndex: number, round: number
     selfPlant: {
       id: slot.plantId,
       biome: row,
-      sunlight: slot.water ?? 0,
+      sunlight: slot.sunlight ?? 0,
       sunlightCapacity: 99,
       tucked: [],
       mature: false
@@ -146,7 +146,7 @@ function activatePlantForRow(player: PlayerDoc, slotIndex: number, round: number
   };
 
   activatablePowers.forEach((power) => {
-    executed = executePower(power, executed);
+    executed = executePower(power, executed as never) as unknown as typeof executed;
     if (power.oncePer === "turn") {
       const key = abilityUsageKey(round, power.id);
       abilityUsage[key] = (abilityUsage[key] ?? 0) + 1;
@@ -154,7 +154,7 @@ function activatePlantForRow(player: PlayerDoc, slotIndex: number, round: number
   });
 
   const nextSlots = [...slots];
-  nextSlots[slotIndex] = { ...slot, water: executed.selfPlant.sunlight };
+  nextSlots[slotIndex] = { ...slot, sunlight: executed.selfPlant.sunlight };
 
   return {
     player: {
@@ -258,7 +258,7 @@ function resolveRoundAndStartNextTurn(transaction: Transaction, gameId: string, 
     transaction.update(playerDocRef(gameId, player.id), {
       gardenSlots: player.gardenSlots,
       resources: player.resources,
-      score: isGameOver ? scoreBreakdown.total : player.score,
+      score: isGameOver ? (scoreBreakdown?.total ?? player.score) : player.score,
       scoreBreakdown,
       abilityUsage: player.abilityUsage ?? {}
     });
@@ -440,7 +440,7 @@ export async function createGameTx(hostDisplayName: string, uid: string) {
       resources: { ...SETUP_STARTING_RESOURCES },
       score: 0,
       hand: [],
-      gardenSlots: Array.from({ length: GARDEN_SLOT_DEFAULT }, () => ({ state: "empty", plantId: null, water: 0 })),
+      gardenSlots: Array.from({ length: GARDEN_SLOT_DEFAULT }, () => ({ state: "empty", plantId: null, sunlight: 0, sunlightCapacity: 0 })),
       keptFromMulligan: false,
       abilityUsage: {}
     });
@@ -470,7 +470,7 @@ export async function joinGameTx(gameId: string, displayName: string, uid: strin
       resources: { ...SETUP_STARTING_RESOURCES },
       score: 0,
       hand: [],
-      gardenSlots: Array.from({ length: GARDEN_SLOT_DEFAULT }, () => ({ state: "empty", plantId: null, water: 0 })),
+      gardenSlots: Array.from({ length: GARDEN_SLOT_DEFAULT }, () => ({ state: "empty", plantId: null, sunlight: 0, sunlightCapacity: 0 })),
       keptFromMulligan: false,
       abilityUsage: {}
     });
@@ -616,7 +616,7 @@ export async function sowPlantTx(gameId: string, uid: string, plantId: string, b
     const plant = getPlantCardById(plantId);
     assert(plant, "Plant card definition not found.");
     const nextSlots = normalizeGardenSlots(playerData);
-    nextSlots[slotIndex] = { state: "grown", plantId: plant.id, water: 0 };
+    nextSlots[slotIndex] = { state: "grown", plantId: plant.id, sunlight: 0, sunlightCapacity: 0 };
 
     const onPlayResolved = resolveOnPlayWindow(
       {
@@ -775,12 +775,12 @@ export async function goToWellTx(gameId: string, uid: string, slotIndices: numbe
       const slot = nextSlots[slotIndex];
       const card = slot.plantId ? getPlantCardById(slot.plantId) : null;
       const capacity = card ? 3 : 0;
-      const currentWater = slot.water ?? 0;
+      const currentWater = slot.sunlight ?? 0;
       if (currentWater >= capacity) {
         continue;
       }
 
-      nextSlots[slotIndex] = { ...slot, water: Math.min(capacity, currentWater + 1) };
+      nextSlots[slotIndex] = { ...slot, sunlight: Math.min(capacity, currentWater + 1), sunlightCapacity: Math.max(slot.sunlightCapacity ?? 0, capacity) };
       distributed += 1;
     }
 
@@ -823,7 +823,7 @@ export async function riskyOverwaterTx(gameId: string, uid: string, slotIndex: n
     assert(slot.state !== "empty" && slot.state !== "withered", "Can only overwater living plants.");
     assert(Boolean(slot.plantId), "Selected slot has no plant.");
 
-    nextSlots[slotIndex] = { ...slot, water: (slot.water ?? 0) + 3 };
+    nextSlots[slotIndex] = { ...slot, sunlight: (slot.sunlight ?? 0) + 3 };
 
     transaction.update(playerDocRef(gameId, playerSnap.id), {
       gardenSlots: nextSlots,

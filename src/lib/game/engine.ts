@@ -66,7 +66,7 @@ export function applyEventToPlayers(players: PlayerDoc[], event: EventCard): Pla
 
     const nextResources = {
       ...player.resources,
-      [event.effectType]: clampResource(player.resources[event.effectType] + event.value)
+      [event.effectType]: clampResource((player.resources[event.effectType] ?? 0) + event.value)
     };
 
     return { ...player, resources: nextResources };

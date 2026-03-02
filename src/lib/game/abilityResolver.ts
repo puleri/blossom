@@ -28,10 +28,10 @@ interface ActivationResult extends AbilityResolutionResult {
 function normalizeGardenSlots(player: PlayerDoc): GardenSlot[] {
   return player.gardenSlots.map((slot, index) => {
     if (typeof slot === "string") {
-      return { state: slot, plantId: player.gardenPlantIds?.[index] ?? null, water: 0 };
+      return { state: slot, plantId: player.gardenPlantIds?.[index] ?? null, sunlight: 0, sunlightCapacity: 0 };
     }
 
-    return { ...slot, plantId: slot.plantId ?? null, water: slot.water ?? 0 };
+    return { ...slot, plantId: slot.plantId ?? null, sunlight: slot.sunlight ?? 0, sunlightCapacity: slot.sunlightCapacity ?? 0 };
   });
 }
 
@@ -86,7 +86,7 @@ function runDslTrigger(player: PlayerDoc, slotIndex: number, kind: TriggerKind, 
     selfPlant: {
       id: slot.plantId,
       biome: row,
-      sunlight: slot.water ?? 0,
+      sunlight: slot.sunlight ?? 0,
       sunlightCapacity: 99,
       tucked: [],
       mature: false
@@ -106,7 +106,7 @@ function runDslTrigger(player: PlayerDoc, slotIndex: number, kind: TriggerKind, 
   });
 
   const updatedSlots = [...slots];
-  updatedSlots[slotIndex] = { ...slot, water: executed.selfPlant.sunlight };
+  updatedSlots[slotIndex] = { ...slot, sunlight: executed.selfPlant.sunlight };
 
   return {
     player: {
