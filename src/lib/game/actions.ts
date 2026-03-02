@@ -28,6 +28,7 @@ import {
   resolveRoundEndUpkeepStartAbilities
 } from "@/lib/game/engine";
 import { gameDocRef, gameLogColRef, playerDocRef, playersColRef } from "@/lib/game/refs";
+import { resolveOnPlayWindow } from "@/lib/game/abilityResolver";
 import type {
   BiomeActivationAnnouncement,
   BiomeName,
@@ -404,9 +405,21 @@ export async function sowPlantTx(gameId: string, uid: string, plantId: string, b
     const nextSlots = normalizeGardenSlots(playerData);
     nextSlots[slotIndex] = { state: "grown", plantId: plant.id, water: 0 };
 
+    const onPlayResolved = resolveOnPlayWindow(
+      {
+        id: playerSnap.id,
+        ...playerData,
+        hand: playerData.hand.filter((cardId) => cardId !== plantId),
+        gardenSlots: nextSlots
+      },
+      slotIndex
+    );
+
     transaction.update(playerDocRef(gameId, playerSnap.id), {
-      hand: playerData.hand.filter((cardId) => cardId !== plantId),
-      gardenSlots: nextSlots
+      hand: onPlayResolved.player.hand,
+      resources: onPlayResolved.player.resources,
+      score: onPlayResolved.player.score,
+      gardenSlots: normalizeGardenSlots(onPlayResolved.player)
     });
 
     consumeTurnAction(transaction, gameId, gameData, players, playerSnap.id, playerData.displayName);
@@ -415,6 +428,14 @@ export async function sowPlantTx(gameId: string, uid: string, plantId: string, b
       message: `${playerData.displayName} planted ${plant.name} in ${BIOME_LABELS[biome]} (leftmost open slot).`,
       playerId: playerSnap.id,
       type: "action"
+    });
+
+    onPlayResolved.logs.forEach((entry) => {
+      appendLog(transaction, gameId, {
+        message: `${playerData.displayName} ${entry.message}`,
+        playerId: playerSnap.id,
+        type: "action"
+      });
     });
   });
 }

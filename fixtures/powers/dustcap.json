@@ -1,0 +1,14 @@
+{
+  "id": "dustcap-root-spend-compost-draw",
+  "trigger": { "kind": "onActivate", "row": "root" },
+  "steps": [
+    {
+      "op": "if",
+      "cond": { "op": "count", "scope": "playerTableau", "predicate": {}, "cmp": ">=", "value": 0 },
+      "then": [
+        { "op": "spendResource", "resource": "compost", "amount": 1, "from": "self" },
+        { "op": "drawCards", "amount": 2, "to": "self", "source": "deck" }
+      ]
+    }
+  ]
+}
