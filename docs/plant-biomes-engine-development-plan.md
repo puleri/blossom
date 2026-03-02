@@ -33,7 +33,7 @@ playable digital version of the plant-biome engine-building card game
 ### 1.3 Biomes and Activations
 
 -   Understory → Root activation row
--   Desert → To the Sun activation row
+-   Oasis Edge → To the Sun activation row
 -   Meadow → Pollinate activation row
 -   Canopy → Placement biome
 
