@@ -1,0 +1,8 @@
+{
+  "id": "pollinate_draw2_tuck1",
+  "trigger": { "kind": "onActivate", "row": "pollinate" },
+  "steps": [
+    { "op": "drawCards", "amount": 2, "to": "self", "source": "deck" },
+    { "op": "tuckCard", "amount": 1, "from": "hand", "underPlant": { "ref": "self" } }
+  ]
+}
