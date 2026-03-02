@@ -270,7 +270,7 @@ export async function startGameSetupTx(gameId: string, uid: string) {
     const gameData = gameSnap.data();
 
     assert(gameData.phase === "lobby", "Game has already started.");
-    assert(players.length >= 2, "Need at least 2 players to start.");
+    assert(players.length >= 1, "Need at least 1 player to start.");
 
     const hostSnap = players.find((snapshot) => snapshot.id === gameData.hostPlayerId);
     assert(hostSnap, "Host player not found.");

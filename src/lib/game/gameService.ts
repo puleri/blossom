@@ -189,8 +189,8 @@ export async function startGameFromLobby(gameId: string, playerId: string, uid?:
   }
 
   const playersSnap = await getDocs(query(collection(gameRef, "players"), orderBy("joinedAt", "asc")));
-  if (playersSnap.size < 2) {
-    throw new Error("Need at least 2 players to start.");
+  if (playersSnap.size < 1) {
+    throw new Error("Need at least 1 player to start.");
   }
 
   const playerIds = playersSnap.docs.map((player) => player.id);
