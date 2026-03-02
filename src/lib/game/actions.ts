@@ -22,10 +22,10 @@ import {
   resolveRoundEndUpkeepStartAbilities
 } from "@/lib/game/engine";
 import { CARD_POWERS } from "@/lib/game/powers/cardPowers";
-import { executeTriggerForPlant } from "@/lib/game/powers/interpreter";
+import { executePower } from "@/lib/game/powers/interpreter";
 import type { ActivateRow } from "@/lib/game/powers/types";
 import { gameDocRef, gameLogColRef, playerDocRef, playersColRef } from "@/lib/game/refs";
-import { resolveOnPlayWindow } from "@/lib/game/abilityResolver";
+import { abilityUsageKey, resolveOnPlayWindow } from "@/lib/game/abilityResolver";
 import type {
   BiomeActivationAnnouncement,
   BiomeName,
@@ -94,7 +94,7 @@ function rowKeyForSlot(slotIndex: number): ActivateRow {
   return "toTheSun";
 }
 
-function activatePlantForRow(player: PlayerDoc, slotIndex: number) {
+function activatePlantForRow(player: PlayerDoc, slotIndex: number, round: number) {
   const slots = normalizeGardenSlots(player);
   const slot = slots[slotIndex];
   if (!slot?.plantId || slot.state !== "grown") {
@@ -110,31 +110,44 @@ function activatePlantForRow(player: PlayerDoc, slotIndex: number) {
     return { player, logs: [] as Array<{ slotIndex: number; message: string }> };
   }
 
-  const runtimePlayer = {
-    id: player.id,
-    resources: { ...(player.resources as unknown as Record<string, number>) },
-    score: player.score,
-    hand: [...player.hand]
+  const abilityUsage = { ...(player.abilityUsage ?? {}) };
+  const activatablePowers = matchingPowers.filter((power) => {
+    if (power.oncePer !== "turn") {
+      return true;
+    }
+
+    return !abilityUsage[abilityUsageKey(round, power.id)];
+  });
+
+  if (activatablePowers.length === 0) {
+    return { player, logs: [] as Array<{ slotIndex: number; message: string }> };
+  }
+
+  let executed = {
+    player: {
+      id: player.id,
+      resources: { ...(player.resources as unknown as Record<string, number>) },
+      score: player.score,
+      hand: [...player.hand]
+    },
+    selfPlant: {
+      id: slot.plantId,
+      biome: row,
+      sunlight: slot.water ?? 0,
+      sunlightCapacity: 99,
+      tucked: [],
+      mature: false
+    },
+    gameState: { deck: [], tray: [], players: [] }
   };
 
-  const executed = executeTriggerForPlant(
-    "onActivate",
-    slot.plantId,
-    {
-      player: runtimePlayer,
-      selfPlant: {
-        id: slot.plantId,
-        biome: row,
-        sunlight: slot.water ?? 0,
-        sunlightCapacity: 99,
-        tucked: [],
-        mature: false
-      },
-      gameState: { deck: [], tray: [], players: [] },
-      powersByPlantId: CARD_POWERS
-    },
-    row
-  );
+  activatablePowers.forEach((power) => {
+    executed = executePower(power, executed);
+    if (power.oncePer === "turn") {
+      const key = abilityUsageKey(round, power.id);
+      abilityUsage[key] = (abilityUsage[key] ?? 0) + 1;
+    }
+  });
 
   const nextSlots = [...slots];
   nextSlots[slotIndex] = { ...slot, water: executed.selfPlant.sunlight };
@@ -145,9 +158,10 @@ function activatePlantForRow(player: PlayerDoc, slotIndex: number) {
       resources: { ...player.resources, ...(executed.player.resources as unknown as PlayerDoc["resources"]) },
       score: executed.player.score,
       hand: executed.player.hand,
-      gardenSlots: nextSlots
+      gardenSlots: nextSlots,
+      abilityUsage
     },
-    logs: matchingPowers.map((power) => ({ slotIndex, message: `triggered ${power.id}` }))
+    logs: activatablePowers.map((power) => ({ slotIndex, message: `triggered ${power.id}` }))
   };
 }
 
@@ -326,7 +340,7 @@ async function takeRowActionTx(gameId: string, uid: string, action: TurnActionCh
     for (const slotIndex of getSlotsForAction(action)) {
       const slot = normalizeGardenSlots(resolvedPlayer)[slotIndex];
       if (!slot || slot.state === "empty" || slot.state === "withered" || !slot.plantId) continue;
-      const resolved = activatePlantForRow(resolvedPlayer, slotIndex);
+      const resolved = activatePlantForRow(resolvedPlayer, slotIndex, gameData.round);
       resolvedPlayer = resolved.player;
       if (resolved.logs.length === 0) {
         activationLogs.push(`slot ${slotIndex + 1}: no activatable ability.`);
@@ -659,7 +673,7 @@ export async function activateBiomeTx(gameId: string, uid: string, biome: BiomeN
         continue;
       }
 
-      const resolved = activatePlantForRow(resolvedPlayer, slotIndex);
+      const resolved = activatePlantForRow(resolvedPlayer, slotIndex, gameData.round);
       resolvedPlayer = resolved.player;
       if (resolved.logs.length === 0) {
         activationLogs.push(`slot ${slotIndex + 1}: no activatable ability.`);
@@ -914,7 +928,7 @@ export async function activatePlantAbilityTx(gameId: string, uid: string, slotIn
     const playerData = playerSnap.data();
     assert(slotIndex >= 0 && slotIndex < playerData.gardenSlots.length, "Invalid garden slot.");
 
-    const resolved = activatePlantForRow({ id: playerSnap.id, ...playerData }, slotIndex);
+    const resolved = activatePlantForRow({ id: playerSnap.id, ...playerData }, slotIndex, gameData.round);
 
     transaction.update(playerDocRef(gameId, playerSnap.id), {
       resources: resolved.player.resources,
