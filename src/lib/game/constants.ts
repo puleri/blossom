@@ -10,7 +10,7 @@ export const ACTIONS_PER_TURN = 2;
 
 export const BIOME_ORDER = ["desert", "plains", "rainforest"] as const;
 
-export const BIOME_SLOT_INDICES = {
+export const BIOME_SLOT_INDICES: Record<"desert" | "plains" | "rainforest", readonly number[]> = {
   desert: [0, 1, 2, 3, 4],
   plains: [5, 6, 7, 8, 9],
   rainforest: [10, 11, 12, 13, 14]

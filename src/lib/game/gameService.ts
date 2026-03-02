@@ -65,7 +65,7 @@ export async function createGame(hostDisplayName: string, uid?: string | null) {
     resources: { ...SETUP_STARTING_RESOURCES },
     score: 0,
     hand: [],
-    gardenSlots: Array.from({ length: GARDEN_SLOT_DEFAULT }, () => ({ state: "empty", plantId: null })),
+    gardenSlots: Array.from({ length: GARDEN_SLOT_DEFAULT }, () => ({ state: "empty", plantId: null, sunlight: 0, sunlightCapacity: 0 })),
     keptFromMulligan: false,
     abilityUsage: {}
   };
@@ -100,7 +100,7 @@ export async function joinGame(gameId: string, displayName: string, uid?: string
     resources: { ...SETUP_STARTING_RESOURCES },
     score: 0,
     hand: [],
-    gardenSlots: Array.from({ length: GARDEN_SLOT_DEFAULT }, () => ({ state: "empty", plantId: null })),
+    gardenSlots: Array.from({ length: GARDEN_SLOT_DEFAULT }, () => ({ state: "empty", plantId: null, sunlight: 0, sunlightCapacity: 0 })),
     keptFromMulligan: false,
     abilityUsage: {}
   };
