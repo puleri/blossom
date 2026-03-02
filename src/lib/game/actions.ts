@@ -84,6 +84,10 @@ function getBiomeLevel(gardenSlots: GardenSlot[], biome: BiomeName) {
   }).length;
 }
 
+function isPlantableSlotState(state: GardenSlotState) {
+  return state === "empty" || state === "withered";
+}
+
 function rowKeyForSlot(slotIndex: number): ActivateRow {
   if (BIOME_SLOT_INDICES.desert.includes(slotIndex)) {
     return "root";
@@ -601,7 +605,10 @@ export async function sowPlantTx(gameId: string, uid: string, plantId: string, b
     const playerData = playerSnap.data();
     const gardenSlots = normalizeGardenSlots(playerData);
     const biomeSlots = getBiomeSlots(biome);
-    const slotIndex = biomeSlots.find((index) => gardenSlots[index]?.state === "empty");
+    const slotIndex = biomeSlots.find((index) => {
+      const slot = gardenSlots[index];
+      return slot ? isPlantableSlotState(slot.state) : false;
+    });
     assert(slotIndex !== undefined, `${BIOME_LABELS[biome]} has no empty planting slots.`);
 
     assert(playerData.hand.includes(plantId), "Plant not found in hand.");
