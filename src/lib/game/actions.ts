@@ -12,19 +12,14 @@ import {
 import { firestore } from "@/lib/firestore";
 import { ACTIONS_PER_TURN, BIOME_LABELS, BIOME_SLOT_INDICES, GARDEN_SLOT_DEFAULT, ROUNDS_TOTAL, SETUP_HAND_SIZE, SETUP_STARTING_RESOURCES } from "@/lib/game/constants";
 import { getPlantCardById, getPlantDisplayName } from "@/lib/game/cards/details";
-import { EVENT_CARDS } from "@/lib/game/cards/events";
 import { PLANT_CARD_IDS } from "@/lib/game/cards/plants";
-import { drawFromDeck, drawSetupHands, revealNextEvent, shuffleFisherYates } from "@/lib/game/decks";
+import { drawFromDeck, drawSetupHands, shuffleFisherYates } from "@/lib/game/decks";
 import {
   activatePlantAbilityForTurn,
   applyAdjacentPairBonuses,
-  applyEventToPlayersWithReactions,
   applyPlantDecayAndDeaths,
   applyResourcePressureCaps,
-  collectBudTokens,
   computePlayerScore,
-  forceBloom,
-  harvestBudsForPoints,
   resolveRoundEndUpkeepStartAbilities
 } from "@/lib/game/engine";
 import { gameDocRef, gameLogColRef, playerDocRef, playersColRef } from "@/lib/game/refs";
@@ -32,14 +27,11 @@ import { resolveOnPlayWindow } from "@/lib/game/abilityResolver";
 import type {
   BiomeActivationAnnouncement,
   BiomeName,
-  EventCard,
-  EventForecast,
   GameDoc,
   GameLogEntryDoc,
   GardenSlot,
   GardenSlotState,
-  PlayerDoc,
-  UpkeepEventResponse
+  PlayerDoc
 } from "@/lib/game/types";
 
 function assert(condition: unknown, message: string): asserts condition {
@@ -88,14 +80,6 @@ function getBiomeLevel(gardenSlots: GardenSlot[], biome: BiomeName) {
 }
 
 
-function getCurrentEvent(game: Omit<GameDoc, "id">) {
-  if (!game.currentEventId) {
-    return null;
-  }
-
-  return EVENT_CARDS.find((event) => event.id === game.currentEventId) ?? null;
-}
-
 function getRemainingActions(game: Omit<GameDoc, "id">) {
   return game.remainingActions ?? ACTIONS_PER_TURN;
 }
@@ -127,48 +111,6 @@ function consumeTurnAction(
   }
 
   transaction.update(gameDocRef(gameId), { remainingActions });
-}
-
-function buildForecast(event: EventCard | null): EventForecast | null {
-  if (!event) {
-    return null;
-  }
-
-  return {
-    eventId: event.id,
-    effectType: event.effectType,
-    tags: event.tags,
-    polarity: event.value >= 0 ? "positive" : "negative"
-  };
-}
-
-function applyEventValueModifier(baseValue: number, response: UpkeepEventResponse | undefined) {
-  if (!response || response.choice === "none" || baseValue === 0) {
-    return baseValue;
-  }
-
-  const direction = baseValue > 0 ? 1 : -1;
-  const magnitude = Math.abs(baseValue);
-
-  if (response.choice === "amplify") {
-    return baseValue + direction;
-  }
-
-  return direction * Math.max(0, magnitude - 1);
-}
-
-function applyEventToSinglePlayer(player: PlayerDoc, event: EventCard, value: number): PlayerDoc {
-  if (event.effectType === "points") {
-    return { ...player, score: Math.max(0, player.score + value) };
-  }
-
-  return {
-    ...player,
-    resources: {
-      ...player.resources,
-      [event.effectType]: Math.max(0, player.resources[event.effectType] + value)
-    }
-  };
 }
 
 function resolveNextTurnState(game: Omit<GameDoc, "id">, players: QueryDocumentSnapshot<Omit<PlayerDoc, "id">>[], currentPlayerId: string) {
@@ -205,7 +147,7 @@ export async function createGameTx(hostDisplayName: string, uid: string) {
       playerOrder: [],
       turnIndex: 0,
       remainingActions: ACTIONS_PER_TURN,
-      eventDeck: shuffleFisherYates(EVENT_CARDS),
+      eventDeck: [],
       plantDeck: [],
       currentEventId: null,
       nextEventForecast: null,
@@ -352,8 +294,6 @@ export async function submitSetupKeepTx(
     });
 
     if (allReady) {
-      const { event, remainingDeck } = revealNextEvent(gameSnap.data().eventDeck);
-      assert(event, "No events remaining in the event deck.");
       const activePlayerId = gameSnap.data().playerOrder[0] ?? players[0]?.id ?? null;
 
       transaction.update(gameRef, {
@@ -361,20 +301,11 @@ export async function submitSetupKeepTx(
         activePlayerId,
         turnIndex: 0,
         remainingActions: ACTIONS_PER_TURN,
-        eventDeck: remainingDeck,
-        currentEventId: event.id,
-        nextEventForecast: buildForecast(remainingDeck[0] ?? null),
+        eventDeck: [],
+        currentEventId: null,
+        nextEventForecast: null,
         upkeepEventResponses: {}
       });
-      appendLog(transaction, gameId, { message: `Round 1 event drawn: ${event.name}. It resolves at round end.`, type: "system" });
-      appendLog(
-        transaction,
-        gameId,
-        {
-          message: `Forecast for round 2: ${(remainingDeck[0]?.tags ?? []).join(", ")} ${remainingDeck[0]?.effectType ?? "unknown"} trend (${(remainingDeck[0]?.value ?? 0) >= 0 ? "positive" : "negative"}), exact strength unknown.`,
-          type: "system"
-        }
-      );
     }
   });
 }
@@ -697,13 +628,7 @@ export async function tradeWaterForSeedsTx(gameId: string, uid: string) {
     const waterCost = 2;
     assert(playerData.resources.water >= waterCost, "Not enough water to trade.");
 
-    const currentEvent = getCurrentEvent(gameData);
-    const eventModifier = currentEvent?.id === "rain" || currentEvent?.id === "seedBurst" || currentEvent?.id === "sprinkle"
-      ? 1
-      : currentEvent?.id === "drought" || currentEvent?.id === "dryHeat"
-        ? -1
-        : 0;
-    const seedsGained = Math.max(1, Math.min(2, 1 + eventModifier));
+    const seedsGained = 1;
 
     transaction.update(playerDocRef(gameId, playerSnap.id), {
       resources: {
@@ -716,74 +641,7 @@ export async function tradeWaterForSeedsTx(gameId: string, uid: string) {
     consumeTurnAction(transaction, gameId, gameData, players, playerSnap.id, playerData.displayName);
 
     appendLog(transaction, gameId, {
-      message: `${playerData.displayName} risked ${waterCost} water for seed stock and got ${seedsGained} seed${seedsGained === 1 ? "" : "s"}${
-        currentEvent ? ` under ${currentEvent.name}` : ""
-      }.`,
-      playerId: playerSnap.id,
-      type: "action"
-    });
-  });
-}
-
-export async function harvestNowTx(gameId: string, uid: string) {
-  const players = await getOrderedPlayers(gameId);
-
-  return runTransaction(firestore, async (transaction) => {
-    const gameSnap = await transaction.get(gameDocRef(gameId));
-    assert(gameSnap.exists(), "Game not found.");
-    const gameData = gameSnap.data();
-    requireTurnPhase(gameData);
-
-    const playerSnap = getPlayerByUid(players, uid);
-    assert(gameData.activePlayerId === playerSnap.id, "Only the active player can perform turn actions.");
-    requireActionsRemaining(gameData);
-
-    const playerData = playerSnap.data();
-    assert(playerData.resources.buds > 0, "No buds available to harvest.");
-
-    const harvested = harvestBudsForPoints({ id: playerSnap.id, ...playerData });
-
-    transaction.update(playerDocRef(gameId, playerSnap.id), {
-      resources: harvested.resources,
-      score: harvested.score
-    });
-
-    consumeTurnAction(transaction, gameId, gameData, players, playerSnap.id, playerData.displayName);
-
-    appendLog(transaction, gameId, {
-      message: `${playerData.displayName} harvested ${playerData.resources.buds} bud${playerData.resources.buds === 1 ? "" : "s"} immediately for ${harvested.score - playerData.score} point${harvested.score - playerData.score === 1 ? "" : "s"}.`,
-      playerId: playerSnap.id,
-      type: "action"
-    });
-  });
-}
-
-export async function forceBloomTx(gameId: string, uid: string) {
-  const players = await getOrderedPlayers(gameId);
-
-  return runTransaction(firestore, async (transaction) => {
-    const gameSnap = await transaction.get(gameDocRef(gameId));
-    assert(gameSnap.exists(), "Game not found.");
-    const gameData = gameSnap.data();
-    requireTurnPhase(gameData);
-
-    const playerSnap = getPlayerByUid(players, uid);
-    assert(gameData.activePlayerId === playerSnap.id, "Only the active player can perform turn actions.");
-    requireActionsRemaining(gameData);
-
-    const playerData = playerSnap.data();
-    assert(playerData.resources.buds > 0, "No buds available to bloom.");
-
-    const bloomed = forceBloom({ id: playerSnap.id, ...playerData });
-
-    transaction.update(playerDocRef(gameId, playerSnap.id), {
-      resources: bloomed.resources
-    });
-
-    consumeTurnAction(transaction, gameId, gameData, players, playerSnap.id, playerData.displayName);
-
-    appendLog(transaction, gameId, {
-      message: `${playerData.displayName} forced ${playerData.resources.buds} bud${playerData.resources.buds === 1 ? "" : "s"} to bloom into flowers.`,
+      message: `${playerData.displayName} risked ${waterCost} water for seed stock and got ${seedsGained} seed${seedsGained === 1 ? "" : "s"}.`,
       playerId: playerSnap.id,
       type: "action"
     });
@@ -857,61 +715,6 @@ export async function advanceTurnOrRoundTx(gameId: string, uid: string) {
   });
 }
 
-export async function submitUpkeepEventResponseTx(
-  gameId: string,
-  uid: string,
-  choice: "mitigate" | "amplify" | "none",
-  spentResource: "water" = "water"
-) {
-  const players = await getOrderedPlayers(gameId);
-
-  return runTransaction(firestore, async (transaction) => {
-    const gameRef = gameDocRef(gameId);
-    const gameSnap = await transaction.get(gameRef);
-    assert(gameSnap.exists(), "Game not found.");
-
-    const gameData = gameSnap.data();
-    assert(gameData.phase === "upkeep", "Event responses can only be submitted during upkeep.");
-
-    const playerSnap = getPlayerByUid(players, uid);
-    const playerData = playerSnap.data();
-
-    const existingResponses = gameData.upkeepEventResponses ?? {};
-    assert(!existingResponses[playerSnap.id], "You already submitted an upkeep response.");
-
-    if (choice !== "none") {
-      assert(playerData.resources[spentResource] >= 1, `Not enough ${spentResource} to submit this response.`);
-      transaction.update(playerDocRef(gameId, playerSnap.id), {
-        resources: {
-          ...playerData.resources,
-          [spentResource]: playerData.resources[spentResource] - 1
-        }
-      });
-    }
-
-    const response: UpkeepEventResponse = {
-      choice,
-      spentResource: choice === "none" ? null : spentResource
-    };
-
-    transaction.update(gameRef, {
-      upkeepEventResponses: {
-        ...existingResponses,
-        [playerSnap.id]: response
-      }
-    });
-
-    appendLog(transaction, gameId, {
-      message:
-        choice === "none"
-          ? `${playerData.displayName} chose not to respond before upkeep event resolution.`
-          : `${playerData.displayName} chose to ${choice} the event by spending 1 ${spentResource}.`,
-      playerId: playerSnap.id,
-      type: "action"
-    });
-  });
-}
-
 export async function resolveRoundUpkeepTx(gameId: string, uid: string) {
   const players = await getOrderedPlayers(gameId);
 
@@ -942,11 +745,10 @@ export async function resolveRoundUpkeepTx(gameId: string, uid: string) {
       });
     });
 
-    const updatedPlayersAfterUpkeep = roundEndResults.map((result) => {
+    const updatedPlayers = roundEndResults.map((result) => {
       const afterDecay = applyPlantDecayAndDeaths(result.player);
       const afterAdjacentBonuses = applyAdjacentPairBonuses(afterDecay);
-      const afterBudCollection = collectBudTokens(afterAdjacentBonuses);
-      const afterResourcePressure = applyResourcePressureCaps(afterBudCollection);
+      const afterResourcePressure = applyResourcePressureCaps(afterAdjacentBonuses);
 
       return {
         ...afterResourcePressure,
@@ -956,30 +758,6 @@ export async function resolveRoundUpkeepTx(gameId: string, uid: string) {
         }
       };
     });
-
-    const currentEvent = EVENT_CARDS.find((event) => event.id === gameData.currentEventId) ?? null;
-    const eventResponses = gameData.upkeepEventResponses ?? {};
-
-    const eventResolution = currentEvent
-      ? applyEventToPlayersWithReactions(updatedPlayersAfterUpkeep, currentEvent)
-      : { players: updatedPlayersAfterUpkeep, logs: [] };
-
-    eventResolution.logs.forEach(({ playerId, trigger }) => {
-      appendLog(transaction, gameId, {
-        message: `${getPlantDisplayName(trigger.plantId)} (slot ${trigger.slotIndex + 1}) ${trigger.message}`,
-        playerId,
-        type: "system"
-      });
-    });
-
-    const updatedPlayers = currentEvent
-      ? eventResolution.players.map((player) => {
-          const response = eventResponses[player.id];
-          const adjustedValue = applyEventValueModifier(currentEvent.value, response);
-
-          return applyEventToSinglePlayer(player, currentEvent, adjustedValue);
-        })
-      : eventResolution.players;
 
     const nextRound = gameData.round + 1;
     const isGameOver = nextRound > gameData.roundsTotal;
@@ -1004,32 +782,10 @@ export async function resolveRoundUpkeepTx(gameId: string, uid: string) {
       lastPhaseResolvedRound: gameData.round
     });
 
-    if (!isGameOver) {
-      const { event, remainingDeck } = revealNextEvent(gameData.eventDeck);
-      assert(event, "No events remaining in the event deck.");
-      transaction.update(gameRef, {
-        eventDeck: remainingDeck,
-        currentEventId: event.id,
-        nextEventForecast: buildForecast(remainingDeck[0] ?? null)
-      });
-      appendLog(transaction, gameId, { message: `Round ${nextRound} event drawn: ${event.name}. It resolves at round end.`, type: "system" });
-      const nextForecast = buildForecast(remainingDeck[0] ?? null);
-      if (nextForecast) {
-        appendLog(
-          transaction,
-          gameId,
-          {
-            message: `Forecast for round ${nextRound + 1}: tags ${nextForecast.tags.join(", ")}, ${nextForecast.effectType} trend (${nextForecast.polarity}), exact strength unknown.`,
-            type: "system"
-          }
-        );
-      }
-    }
-
     appendLog(transaction, gameId, {
       message: isGameOver
-        ? `Round ${gameData.round} upkeep and event resolved. Game ended.`
-        : `Round ${gameData.round} upkeep resolved (buds generated), then event resolved. Round ${nextRound} turns begin.`,
+        ? `Round ${gameData.round} upkeep resolved. Game ended.`
+        : `Round ${gameData.round} upkeep resolved. Round ${nextRound} turns begin.`,
       type: "system"
     });
   });
