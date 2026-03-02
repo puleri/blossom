@@ -36,13 +36,13 @@ function normalizeGardenSlots(player: PlayerDoc): GardenSlot[] {
 }
 
 function rowForSlot(slotIndex: number): ActivateRow {
-  if (BIOME_SLOT_INDICES.desert.includes(slotIndex)) {
-    return "root";
+  if (BIOME_SLOT_INDICES.oasisEdge.includes(slotIndex)) {
+    return "toTheSun";
   }
-  if (BIOME_SLOT_INDICES.plains.includes(slotIndex)) {
+  if (BIOME_SLOT_INDICES.meadow.includes(slotIndex)) {
     return "pollinate";
   }
-  return "toTheSun";
+  return "root";
 }
 
 export function abilityUsageKey(round: number, abilityId: string) {

@@ -19,7 +19,7 @@ export type Condition =
   | {
       op: "count";
       scope: "playerTableau" | "row" | "allPlayers";
-      predicate: { biome?: "desert" | "meadow" | "understory" | "canopy"; tag?: string; mature?: boolean };
+      predicate: { biome?: "oasisEdge" | "meadow" | "understory" | "canopy"; tag?: string; mature?: boolean };
       cmp: ">=" | ">" | "==" | "<=" | "<";
       value: number;
     };
@@ -43,7 +43,7 @@ export interface PowerDsl {
 
 export interface RuntimePlant {
   id: string;
-  biome?: "desert" | "meadow" | "understory" | "canopy";
+  biome?: "oasisEdge" | "meadow" | "understory" | "canopy";
   sunlight: number;
   sunlightCapacity: number;
   tucked: string[];

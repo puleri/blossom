@@ -30,13 +30,13 @@ function getSlotState(slot: GardenSlot | string | null | undefined): GardenSlot[
 }
 
 const BIOME_BACKGROUND_COLORS: Record<BiomeName, string> = {
-  desert: "#f4d7a1",
-  plains: "#cde9a3",
-  rainforest: "#9fd8b6"
+  oasisEdge: "#f4d7a1",
+  meadow: "#cde9a3",
+  understory: "#9fd8b6"
 };
 
 export function GardenTableau({ slots }: GardenTableauProps) {
-  const biomes: BiomeName[] = ["desert", "plains", "rainforest"];
+  const biomes: BiomeName[] = ["oasisEdge", "meadow", "understory"];
 
   return (
     <section>

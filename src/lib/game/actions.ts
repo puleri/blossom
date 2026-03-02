@@ -89,13 +89,13 @@ function isPlantableSlotState(state: GardenSlotState) {
 }
 
 function rowKeyForSlot(slotIndex: number): ActivateRow {
-  if (BIOME_SLOT_INDICES.desert.includes(slotIndex)) {
-    return "root";
+  if (BIOME_SLOT_INDICES.oasisEdge.includes(slotIndex)) {
+    return "toTheSun";
   }
-  if (BIOME_SLOT_INDICES.plains.includes(slotIndex)) {
+  if (BIOME_SLOT_INDICES.meadow.includes(slotIndex)) {
     return "pollinate";
   }
-  return "toTheSun";
+  return "root";
 }
 
 function activatePlantForRow(player: PlayerDoc, slotIndex: number, round: number) {
@@ -289,12 +289,12 @@ function getSlotsForAction(action: TurnActionChoice) {
     return [3, 2, 1, 0];
   }
   if (action === "root") {
-    return [...getBiomeSlots("rainforest")].sort((a, b) => b - a);
+    return [...getBiomeSlots("understory")].sort((a, b) => b - a);
   }
   if (action === "toTheSun") {
-    return [...getBiomeSlots("desert")].sort((a, b) => b - a);
+    return [...getBiomeSlots("oasisEdge")].sort((a, b) => b - a);
   }
-  return [...getBiomeSlots("plains")].sort((a, b) => b - a);
+  return [...getBiomeSlots("meadow")].sort((a, b) => b - a);
 }
 
 function getActionLevel(gardenSlots: GardenSlot[], action: TurnActionChoice) {
@@ -303,14 +303,14 @@ function getActionLevel(gardenSlots: GardenSlot[], action: TurnActionChoice) {
   }
 
   if (action === "root") {
-    return getBiomeLevel(gardenSlots, "rainforest");
+    return getBiomeLevel(gardenSlots, "understory");
   }
 
   if (action === "toTheSun") {
-    return getBiomeLevel(gardenSlots, "desert");
+    return getBiomeLevel(gardenSlots, "oasisEdge");
   }
 
-  return getBiomeLevel(gardenSlots, "plains");
+  return getBiomeLevel(gardenSlots, "meadow");
 }
 
 function applyBaseRowReward(resources: PlayerDoc["resources"], action: TurnActionChoice, level: number) {
@@ -640,6 +640,10 @@ export async function sowPlantTx(gameId: string, uid: string, plantId: string, b
 
     const plant = getPlantCardById(plantId);
     assert(plant, "Plant card definition not found.");
+    const playableBiomes = Array.isArray(plant.biome) ? plant.biome : plant.biome ? [plant.biome] : [];
+    if (playableBiomes.length > 0) {
+      assert(playableBiomes.includes(biome), `${plant.name} cannot be planted in ${BIOME_LABELS[biome]} Canopy.`);
+    }
     const nextSlots = normalizeGardenSlots(playerData);
     nextSlots[slotIndex] = { state: "grown", plantId: plant.id, sunlight: 0, sunlightCapacity: 0 };
 
@@ -673,7 +677,7 @@ export async function sowPlantTx(gameId: string, uid: string, plantId: string, b
     consumeTurnAction(transaction, gameId, gameData, players, playerSnap.id, playerData.displayName);
 
     appendLog(transaction, gameId, {
-      message: `${playerData.displayName} planted ${plant.name} in ${BIOME_LABELS[biome]} (leftmost open slot).`,
+      message: `${playerData.displayName} planted ${plant.name} in ${BIOME_LABELS[biome]} Canopy (leftmost open slot).`,
       playerId: playerSnap.id,
       type: "action"
     });
@@ -767,16 +771,16 @@ export async function activateBiomeTx(gameId: string, uid: string, biome: BiomeN
   });
 }
 
-export async function activateDesertBiomeTx(gameId: string, uid: string) {
-  return activateBiomeTx(gameId, uid, "desert");
+export async function activateOasisEdgeBiomeTx(gameId: string, uid: string) {
+  return activateBiomeTx(gameId, uid, "oasisEdge");
 }
 
-export async function activatePlainsBiomeTx(gameId: string, uid: string) {
-  return activateBiomeTx(gameId, uid, "plains");
+export async function activateMeadowBiomeTx(gameId: string, uid: string) {
+  return activateBiomeTx(gameId, uid, "meadow");
 }
 
-export async function activateRainforestBiomeTx(gameId: string, uid: string) {
-  return activateBiomeTx(gameId, uid, "rainforest");
+export async function activateUnderstoryBiomeTx(gameId: string, uid: string) {
+  return activateBiomeTx(gameId, uid, "understory");
 }
 
 export async function goToWellTx(gameId: string, uid: string, slotIndices: number[] = []) {

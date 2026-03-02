@@ -41,7 +41,7 @@ const ARID_PLANT_IDS = new Set([
   "parched-root-network",
   "sunscorch-agave",
   "wither-sage",
-  "desert-mat-creeper",
+  "oasis-edge-mat-creeper",
   "scorchvine",
   "mirage-bloom",
   "ironwood-sapling",

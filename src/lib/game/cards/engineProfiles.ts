@@ -19,10 +19,10 @@ const PLAINS_ENGINE_LINES = [
 ] as const;
 
 const DESERT_ENGINE_LINES = [
-  "To the Sun — Gain 1 sunlight token and place it on a Desert plant.",
-  "To the Sun — Gain 2 sunlight tokens and distribute them across Desert plants.",
-  "To the Sun — Gain 1 sunlight token per planted Desert card (max 3).",
-  "To the Sun — Move 1 sunlight from one Desert plant to another, then gain 1 sunlight.",
+  "To the Sun — Gain 1 sunlight token and place it on an Oasis Edge plant.",
+  "To the Sun — Gain 2 sunlight tokens and distribute them across Oasis Edge plants.",
+  "To the Sun — Gain 1 sunlight token per planted Oasis Edge card (max 3).",
+  "To the Sun — Move 1 sunlight from one Oasis Edge plant to another, then gain 1 sunlight.",
   "To the Sun — Gain 3 sunlight tokens; fully grown plants may trigger mature effects."
 ] as const;
 
@@ -37,14 +37,14 @@ const RAINFOREST_ENGINE_LINES = [
 function deriveBiome(cardId: string): BiomeName {
   const school = getPlantSchool(cardId);
   if (school === "arid") {
-    return "desert";
+    return "oasisEdge";
   }
 
   if (school === "carnivorous") {
-    return "rainforest";
+    return "understory";
   }
 
-  return "plains";
+  return "meadow";
 }
 
 function getCardPlayableBiomes(card: PlantCard): BiomeName[] {
@@ -68,11 +68,11 @@ function deriveSunCost(level: PlantEngineProfile["level"]) {
 }
 
 function deriveSunCapacity(biome: BiomeName, level: PlantEngineProfile["level"]) {
-  if (biome === "desert") {
+  if (biome === "oasisEdge") {
     return Math.min(6, level + 2);
   }
 
-  if (biome === "plains") {
+  if (biome === "meadow") {
     return Math.min(5, level + 1);
   }
 
@@ -80,13 +80,13 @@ function deriveSunCapacity(biome: BiomeName, level: PlantEngineProfile["level"])
 }
 
 function deriveEngineSummary(card: PlantCard, cardIndexWithinBiome: number, biome: BiomeName) {
-  const source = biome === "plains" ? PLAINS_ENGINE_LINES : biome === "desert" ? DESERT_ENGINE_LINES : RAINFOREST_ENGINE_LINES;
+  const source = biome === "meadow" ? PLAINS_ENGINE_LINES : biome === "oasisEdge" ? DESERT_ENGINE_LINES : RAINFOREST_ENGINE_LINES;
   return source[cardIndexWithinBiome % source.length];
 }
 
 const profilesById = new Map<string, PlantEngineProfile>();
 const playableBiomesById = new Map<string, BiomeName[]>();
-const biomeCounts: Record<BiomeName, number> = { desert: 0, plains: 0, rainforest: 0 };
+const biomeCounts: Record<BiomeName, number> = { oasisEdge: 0, meadow: 0, understory: 0 };
 
 PLANT_CARDS.forEach((card) => {
   const playableBiomes = getCardPlayableBiomes(card);
@@ -119,9 +119,9 @@ export function getPlantPlayableBiomes(plantId: string): BiomeName[] {
 
 export function getCardsByBiome() {
   const grouped: Record<BiomeName, PlantCard[]> = {
-    desert: [],
-    plains: [],
-    rainforest: []
+    oasisEdge: [],
+    meadow: [],
+    understory: []
   };
 
   PLANT_CARDS.forEach((card) => {
